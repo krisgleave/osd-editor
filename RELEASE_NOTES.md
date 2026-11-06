@@ -1,11 +1,11 @@
-# OSD Editor v1.0 — by KrisTalksTech
+# OSD Editor v1.0.1 — by KrisTalksTech
 
-First public release of OSD Editor, created by Kris Gleave (KrisTalksTech).
+Icon correction for OSD Editor, created by Kris Gleave (KrisTalksTech). The approved artwork is retained, with an opaque, full-bleed blue background to avoid a second pale tile in the Dock. Editing and export behaviour are unchanged.
 
 ## Download
 
-- **OSD-Editor-1.0-Mac.zip** — ready-to-run Apple Silicon Mac app.
-- **OSD-Editor-1.0-source.zip** — matching source, original icon, build/package scripts, tests and documentation.
+- **OSD-Editor-1.0.1-Mac.zip** — ready-to-run Apple Silicon Mac app.
+- **OSD-Editor-1.0.1-source.zip** — matching source, original icon, build/package scripts, tests and documentation.
 - **SHA256SUMS.txt** — SHA-256 checksums for those two ZIPs.
 
 Requires Apple Silicon and macOS 27.0 or later. No Homebrew, FFmpeg or Xcode is required to run the packaged app. It is locally/ad-hoc signed, not Apple Developer ID signed or notarized; see the installation guide.

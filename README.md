@@ -6,7 +6,7 @@
 
 Created by **Kris Gleave (KrisTalksTech)** for the FPV community.
 
-[Download v1.0](https://github.com/krisgleave/osd-editor/releases/latest) · [User guide](docs/USER_GUIDE.md) · [Font setup](docs/FONTS.md) · [Support](SUPPORT.md) · [Report an issue](https://github.com/krisgleave/osd-editor/issues)
+[Download v1.0.1](https://github.com/krisgleave/osd-editor/releases/latest) · [User guide](docs/USER_GUIDE.md) · [Font setup](docs/FONTS.md) · [Support](SUPPORT.md) · [Report an issue](https://github.com/krisgleave/osd-editor/issues)
 
 OSD Editor reconstructs supported recorded OSD so you can move, resize, colour and hide groups before exporting a new video. It can also add a written telemetry line, optional visual indicators and a custom OSD-font label such as a drone name.
 
@@ -37,7 +37,7 @@ Screenshots show an example local setup with a user-imported Nexus font and a cu
 
 ## Requirements
 
-| | v1.0 download |
+| | v1.0.1 download |
 |---|---|
 | Computer | Apple Silicon Mac (M-series) |
 | macOS | 27.0 or later |
@@ -49,7 +49,7 @@ Development testing used an **M4 Pro MacBook Pro** with P1 sample recordings. Th
 
 ## Get started
 
-1. Download **OSD-Editor-1.0-Mac.zip** from [Releases](https://github.com/krisgleave/osd-editor/releases/latest). GitHub’s **Code → Download ZIP** contains source, not the app.
+1. Download **OSD-Editor-1.0.1-Mac.zip** from [Releases](https://github.com/krisgleave/osd-editor/releases/latest). GitHub’s **Code → Download ZIP** contains source, not the app.
 2. Unzip and move **OSD Editor.app** into Applications if desired.
 3. Import a compatible OSD PNG when prompted. **Get OSD fonts…** opens Sneaky FPV’s site without closing the import dialogue. [Font instructions](docs/FONTS.md).
 4. Open a recording. A same-name SRT in the same folder loads automatically; **Choose SRT** allows manual selection.
