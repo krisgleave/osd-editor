@@ -1,0 +1,12 @@
+build/
+dist/
+.DS_Store
+*.mp4
+*.mov
+*.srt
+*.osd
+*.p1preset.json
+settings-*.json
+Fonts/
+*.dSYM/
+.swiftpm/
