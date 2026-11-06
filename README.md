@@ -12,6 +12,29 @@ OSD Editor reconstructs supported recorded OSD so you can move, resize, colour a
 
 **Tested with BETAFPV P1 / Artlynk recordings.** Support for other recording systems is not yet verified; community samples and testing are welcome.
 
+## Screenshots
+
+### OSD and telemetry editing
+
+Arrange recorded OSD, change colours and show optional telemetry visuals. The grid and yellow centre guides are preview-only.
+
+![OSD Editor with a P1 recording, coloured OSD and telemetry visuals](assets/screenshots/osd-and-telemetry.png)
+
+<details>
+<summary>Flight statistics and starting screen</summary>
+
+### Recorded flight statistics
+
+![OSD Editor displaying the recorded flight statistics screen](assets/screenshots/flight-statistics.png)
+
+### Starting screen
+
+![OSD Editor before opening a recording](assets/screenshots/starting-screen.png)
+
+</details>
+
+Screenshots show an example local setup with a user-imported Nexus font and a custom preset. The font and preset are not bundled with the app.
+
 ## Requirements
 
 | | v1.0 download |
