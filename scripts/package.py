@@ -2,7 +2,7 @@
 """Package an ad-hoc signed Apple Silicon release; does not notarize or publish."""
 from pathlib import Path
 import hashlib,plistlib,shutil,struct,subprocess,tempfile,zipfile
-ROOT=Path(__file__).resolve().parents[1];VERSION='1.0.1';BUILD='106';dist=ROOT/'dist';dist.mkdir(exist_ok=True)
+ROOT=Path(__file__).resolve().parents[1];VERSION='1.2.0';BUILD='120';dist=ROOT/'dist';dist.mkdir(exist_ok=True)
 binary=ROOT/'build/OSDEditor'
 if not binary.exists():raise SystemExit('Run python3 scripts/build.py first.')
 with tempfile.TemporaryDirectory(prefix='osd-editor-package-') as tmp:

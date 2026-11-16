@@ -1,8 +1,8 @@
-# OSD Editor v1.0
+# OSD Editor v1.2
 
 Created by Kris Gleave — KrisTalksTech.
 
-OSD Editor is a desktop video editor for reconstructing recorded FPV OSD and adding telemetry overlays to exported videos. Development and sample-based testing focus on the BETAFPV P1 / Artlynk system. Release version: 1.0.
+OSD Editor is a desktop video editor for reconstructing recorded FPV OSD and adding telemetry overlays to exported videos. It supports editable recorded OSD from the tested BETAFPV P1 / Artlynk format and written camera telemetry from compatible DJI SRT sidecars. Release version: 1.2.
 
 It edits recordings already copied to your computer. It does not connect to a receiver or download recordings over USB. P1 Transfer is a separate project.
 
@@ -12,15 +12,15 @@ It edits recordings already copied to your computer. It does not connect to a re
 - Tested during development on an Apple Silicon M4 Pro MacBook Pro, using supplied P1 sample recordings. This is not certification of all P1 firmware, recording modes or Mac configurations.
 - The current downloadable executable is ARM64 only. Its bundle currently specifies macOS 27.0 or later; older macOS releases have not yet been qualified.
 - A compatible sidecar `.osd` reader exists, but real Walksnail recordings have not yet been verified. Do not advertise general Walksnail support yet.
-- DJI and HDZero editable OSD extraction are not currently supported. Burned-in analogue or digital OSD cannot be independently moved or removed by this tool.
+- DJI camera SRT sidecars are supported for written telemetry. DJI graphical OSD extraction and HDZero editable OSD extraction are not currently supported. Burned-in analogue or digital OSD cannot be independently moved or removed by this tool.
 - A compatible video may open without supported editable OSD. That alone does not establish support for its recording system.
 
 ## How it works
 
 1. Copy your recording and any matching sidecar files to the computer.
-2. Open the video. A same-name SRT in the same folder loads automatically; Choose SRT allows manual selection. The file area identifies the loaded files and shows video and SRT information.
+2. Open the video. A same-name SRT in the same folder loads automatically. **Import SRT Files** imports one sidecar manually. For a Gyroflow video created from several DJI chapters, select every original DJI SRT at once. The editor orders and combines them, saves one matching SRT alongside the opened video, then loads it.
 3. Import a compatible OSD image-font PNG through the Fonts menu if prompted. The app copies imported fonts into its managed library. No third-party OSD font is bundled.
-4. Reposition and style OSD, choose the telemetry fields and optional visuals, and set the export range and format.
+4. Reposition and style OSD, choose the telemetry fields and optional visuals, and set the export range and format. With DJI, choose camera fields such as ISO, Shutter, EV, CT, Colour Profile, Aperture and Elapsed.
 5. Export a new MP4. Original media remains unchanged.
 
 The app reads recorded character codes and grid positions, rather than recognising text from the video picture. OSD grouping uses recording drawing runs, with proximity grouping as a fallback. It does not semantically identify every item as GPS, battery, altitude, etc. Different layouts and recordings may group differently.
@@ -49,6 +49,12 @@ A single movable, resizable and colourable bottom line, with independently selec
 - STYMode
 
 The line supports text-font selection and alignment. Text fonts and OSD image fonts are different formats. The font library supports importing, renaming and deleting OSD PNGs and text TTF/OTF files.
+
+## DJI camera telemetry
+
+DJI camera SRT sidecars contain timestamped camera metadata. The editor detects this format automatically and offers the available fields in Telemetry contents. Colour Profile is DJI’s recording profile, while Elapsed begins at `00:00:00` and advances with the recording timeline. Recording Time is the camera’s time of day and displays as `HH:MM:SS`.
+
+Gyroflow can join several DJI video chapters into one stabilised file. Open that completed video, use **Import SRT Files**, select all original SRT chapters and the app creates a combined matching sidecar in the same folder. The source chapters are left unchanged. If a same-name SRT already exists, rename or move it before combining to protect it from replacement.
 
 ## Optional telemetry visuals
 
@@ -79,6 +85,16 @@ The label supports selection, movement, resizing, tint, hide/show, alignment and
 - Sequential batch export using each recording’s own matching SRT and supported OSD, with one common layout. Batch exports use full clips; individual trimming is disabled.
 - Progress percentage, cancellation and a batch report. Completed batch files remain if a later job fails or is cancelled.
 - Output names include the source name and compact export details. Numeric suffixes prevent overwriting existing exports.
+
+### Transparent alpha overlays
+
+Use **Export telemetry alpha only** for a silent transparent ProRes 4444 MOV. Choose any available layers.
+
+- **Telemetry** exports the written telemetry line, including DJI camera fields.
+- **OSD** exports the editable recorded P1/Artlynk OSD.
+- **Visuals** exports enabled P1 visual cards and custom OSD-font text.
+
+Choose **One combined file** when the editor should combine the selected layers into one alpha movie. Choose **Separate files** when you want independent alpha movies for each selected layer in Final Cut Pro, DaVinci Resolve, Premiere Pro or another editor. Place the transparent movie above the matching footage and align both clips at their original start time. The main status bar shows alpha-export progress.
 
 ## Presets
 

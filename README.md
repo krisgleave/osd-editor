@@ -1,16 +1,19 @@
 <p align="center"><img src="assets/AppIcon.png" width="150" alt="OSD Editor icon"></p>
 
+**Version 1.2 adds DJI camera-SRT support, automatic DJI chapter combining and selectable transparent overlay exports.** See [Editing DJI camera telemetry](docs/DJI.md).
+
+
 # OSD Editor
 
 **Edit FPV OSD, telemetry and recordings on your Mac.**
 
 Created by **Kris Gleave (KrisTalksTech)** for the FPV community.
 
-[Download v1.0.1](https://github.com/krisgleave/osd-editor/releases/latest) · [User guide](docs/USER_GUIDE.md) · [Font setup](docs/FONTS.md) · [Support](SUPPORT.md) · [Report an issue](https://github.com/krisgleave/osd-editor/issues)
+[Download v1.2](https://github.com/krisgleave/osd-editor/releases/latest) · [User guide](docs/USER_GUIDE.md) · [Font setup](docs/FONTS.md) · [Support](SUPPORT.md) · [Report an issue](https://github.com/krisgleave/osd-editor/issues)
 
 OSD Editor reconstructs supported recorded OSD so you can move, resize, colour and hide groups before exporting a new video. It can also add a written telemetry line, optional visual indicators and a custom OSD-font label such as a drone name.
 
-**Tested with BETAFPV P1 / Artlynk recordings.** Support for other recording systems is not yet verified; community samples and testing are welcome.
+**Tested with BETAFPV P1 / Artlynk recordings and DJI camera-metadata SRT files.** DJI camera settings are available as written telemetry, while editable graphical OSD remains a P1/Artlynk feature.
 
 ## Screenshots
 
@@ -37,11 +40,11 @@ Screenshots show an example local setup with a user-imported Nexus font and a cu
 
 ## Requirements
 
-| | v1.0.1 download |
+| | v1.2 download |
 |---|---|
 | Computer | Apple Silicon Mac (M-series) |
 | macOS | 27.0 or later |
-| Media verified | Supplied BETAFPV P1 / Artlynk MP4 and matching SRT recordings |
+| Media verified | BETAFPV P1 / Artlynk recordings and DJI camera SRT metadata sidecars |
 | OSD font | User-imported compatible Walksnail PNG font |
 | Extra software to run the app | None: no Homebrew, FFmpeg or Xcode required |
 
@@ -49,10 +52,10 @@ Development testing used an **M4 Pro MacBook Pro** with P1 sample recordings. Th
 
 ## Get started
 
-1. Download **OSD-Editor-1.0.1-Mac.zip** from [Releases](https://github.com/krisgleave/osd-editor/releases/latest). GitHub’s **Code → Download ZIP** contains source, not the app.
+1. Download **OSD-Editor-1.2.0-Mac.zip** from [Releases](https://github.com/krisgleave/osd-editor/releases/latest). GitHub’s **Code → Download ZIP** contains source, not the app.
 2. Unzip and move **OSD Editor.app** into Applications if desired.
 3. Import a compatible OSD PNG when prompted. **Get OSD fonts…** opens Sneaky FPV’s site without closing the import dialogue. [Font instructions](docs/FONTS.md).
-4. Open a recording. A same-name SRT in the same folder loads automatically; **Choose SRT** allows manual selection.
+4. Open a recording. A same-name SRT in the same folder loads automatically. Use **Import SRT Files** to select one sidecar manually, or select several original DJI chapters to combine them into one matching SRT beside the opened video.
 5. Select and arrange overlays, set the range and export format, then export a new MP4.
 
 The app is locally/ad-hoc signed, **not Apple Developer ID signed or notarized**. See [installation and troubleshooting](docs/INSTALLATION.md) if macOS blocks it. Do not disable macOS security protections globally.
@@ -70,6 +73,8 @@ The app is locally/ad-hoc signed, **not Apple Developer ID signed or notarized**
 - 16:9/4:3 framing, overlay-fit checks and Original/2K/4K output.
 - H.264 or HEVC exports retaining source frame timing; no frame-rate conversion setting.
 - Sequential batch export, progress, cancellation and batch reports.
+- DJI camera SRT fields including ISO, shutter, EV, colour temperature, colour profile, aperture and elapsed recording time.
+- Transparent ProRes 4444 overlay export. Choose Telemetry, recorded OSD and Visuals, then create one combined alpha movie or separate alpha movies for each selected layer.
 - Presets with save/rename/delete/import/export, aspect filtering and launch defaults.
 - Managed font library; imported files are copied rather than referenced in Downloads.
 - Light, dark and system appearance; native Mac window controls.
@@ -80,7 +85,7 @@ See the [full user guide](docs/USER_GUIDE.md) for behaviour and limitations.
 
 - It does not download recordings from the receiver, provide live FPV video or change firmware. [P1 Transfer](https://github.com/krisgleave/p1-transfer) is a separate project.
 - It cannot independently remove or move OSD already burned into video pixels.
-- It does not yet claim DJI, HDZero, analogue or general Walksnail editable-OSD support.
+- DJI support reads the camera-metadata SRT for written telemetry. It does not extract or edit DJI graphical OSD from video pixels.
 - OSD groups are recorded characters/positions, not semantically identified GPS/battery objects. Presets may need adjustment for another drone’s layout.
 - Upscaling uses Lanczos resampling; it is not AI detail recovery.
 - Battery fill is not measured remaining charge. Colour bands are configurable raw-voltage thresholds. See [telemetry limitations](docs/USER_GUIDE.md#telemetry-visuals).

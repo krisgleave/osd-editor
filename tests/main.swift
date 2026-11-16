@@ -2,7 +2,47 @@
 import Cocoa
 import AVFoundation
 import CoreImage
-if CommandLine.arguments.contains("--visuals-test") {
+if CommandLine.arguments.contains("--camera-test") {
+ let source=URL(fileURLWithPath:CommandLine.arguments[2])
+ let cues=parseSRT(try String(contentsOf:source,encoding:.utf8))
+ precondition(cues.count==6675 && abs(cues.last!.end-222.705)<0.00001)
+ var exportCues=cues
+ let first=cues.first!.values
+ precondition(Set(first.keys)==Set(knownCameraFields))
+ precondition(first["Aperture"]=="f/2.8" && first["AE metering mode"]=="1" && first["Frame interval"]=="16ms")
+ precondition(first["Colour Profile"]=="D-Log M" && first["Recording date"]=="2026-11-14")
+ precondition(first["Recording time"]=="15:55:28")
+ if CommandLine.arguments.count>4 {
+  let urls=CommandLine.arguments.dropFirst(4).map{URL(fileURLWithPath:$0)}
+  let chapters=try readChapters(urls)
+  let joined=joinedCues(chapters)
+  precondition(joined.count==cues.count)
+  for (a,b) in zip(joined,cues) {
+   precondition(abs(a.start-b.start)<0.000001 && abs(a.end-b.end)<0.000001 && a.values==b.values)
+  }
+  let merged=parseSRT(combinedSRTText(chapters))
+  precondition(merged.count==joined.count)
+  for (a,b) in zip(merged,joined) {precondition(abs(a.start-b.start)<0.000001 && abs(a.end-b.end)<0.000001 && a.values["ISO"]==b.values["ISO"] && a.values["Colour Profile"]==b.values["Colour Profile"])}
+  exportCues=joined
+  print(chapterListing(chapters))
+ }
+ var legacy=Layout()
+ legacy.hiddenCameraFields=["Colour mode"]
+ precondition(!legacy.displayLine(first).contains("Colour Profile"))
+ legacy.enabledCameraExtras=["Frame interval"]
+ precondition(legacy.displayLine(first).contains("Frame interval: 16ms"))
+ let restored=try JSONDecoder().decode(Layout.self,from:JSONEncoder().encode(legacy))
+ precondition(restored.displayLine(first)==legacy.displayLine(first))
+ precondition(cues.last!.values["Shutter"]=="1/320")
+ var layout=Layout()
+ layout.hiddenCameraFields=["EV"]
+ var cameraCards=defaultCameraVisuals();for index in cameraCards.indices {cameraCards[index].enabled=true};layout.visuals=cameraCards
+ precondition(!layout.displayLine(cues[0].values).contains("EV:"))
+ var progress=0.0
+ try writeAlphaMovie(exportCues,layout,CGSize(width:1920,height:1080),URL(fileURLWithPath:CommandLine.arguments[3]),Set([.telemetry]),[],nil,exportCues.last!.end) { progress=$0 }
+ precondition(progress == 1)
+ print("Passed DJI import, field selection and camera export")
+} else if CommandLine.arguments.contains("--visuals-test") {
  let _=NSApplication.shared
  var l=Layout();precondition(l.visuals == nil);var visuals=defaultVisuals();for i in visuals.indices{visuals[i].enabled=true};l.visuals=visuals
  for size in [CGSize(width:1920,height:1080),CGSize(width:1440,height:1080)]{let canvas=CGRect(origin:.zero,size:size);let sizes=visuals.prefix(5).map{visualRect($0,canvas).size};precondition(sizes.allSatisfy{$0==sizes[0]});precondition(abs(sizes[0].width-308.88)<0.1)}

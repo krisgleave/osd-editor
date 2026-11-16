@@ -28,7 +28,7 @@ func fitOverlays(_ initial:Layout,_ groups:[Set<Int>],_ cues:[Cue],_ canvas:CGSi
   }
  }
  layout.cells=cells
- let texts=Set(cues.map{telemetryLine($0.values,layout.widgets)}).filter{!$0.isEmpty}
+ let texts=Set(cues.map{layout.displayLine($0.values)}).filter{!$0.isEmpty}
  var telemetryChanged=false
  if !texts.isEmpty{
   func measurements()->CGSize{texts.reduce(CGSize.zero){result,text in let size=(text as NSString).size(withAttributes:textAttributes(layout.line,canvas.height));return CGSize(width:max(result.width,size.width),height:max(result.height,size.height))}}

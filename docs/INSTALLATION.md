@@ -30,7 +30,7 @@ A fresh user starts with built-in Default and no imported OSD fonts or personal 
 |---|---|
 | Video opens, no OSD | Confirm a valid OSD PNG is loaded; check recording compatibility. SRT alone does not reproduce graphical OSD. |
 | Font name says file missing | Reimport the compatible PNG through Fonts. |
-| SRT not found | Use the same basename in the same folder, or Choose SRT manually. |
+| SRT not found | Use the same basename in the same folder, or use Import SRT Files manually. |
 | Unexpected grouping | Grouping depends on recorded drawing runs/positions; report a sample layout. |
 | Preset absent | Presets filter by output aspect ratio; select the matching frame ratio. |
 | Unexpected colours | Battery bands use raw voltage. Configure thresholds for the actual supply; they are not universal flight limits. |

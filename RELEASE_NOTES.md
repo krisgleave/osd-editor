@@ -1,41 +1,48 @@
-# OSD Editor v1.0.1 — by KrisTalksTech
+# OSD Editor v1.2 — by KrisTalksTech
 
-Icon correction for OSD Editor, created by Kris Gleave (KrisTalksTech). The approved artwork is retained, with an opaque, full-bleed blue background to avoid a second pale tile in the Dock. Editing and export behaviour are unchanged.
+OSD Editor v1.2 adds DJI camera-telemetry workflows and flexible transparent overlay exports while retaining the established P1 / Artlynk editing workflow.
 
 ## Download
 
-- **OSD-Editor-1.0.1-Mac.zip** — ready-to-run Apple Silicon Mac app.
-- **OSD-Editor-1.0.1-source.zip** — matching source, original icon, build/package scripts, tests and documentation.
-- **SHA256SUMS.txt** — SHA-256 checksums for those two ZIPs.
+- **OSD-Editor-1.2.0-Mac.zip** contains the ready-to-run Apple Silicon Mac app.
+- **OSD-Editor-1.2.0-source.zip** contains the matching GPL-3.0-or-later source, build scripts, tests and documentation.
+- **SHA256SUMS.txt** contains SHA-256 checksums for both ZIPs.
 
-Requires Apple Silicon and macOS 27.0 or later. No Homebrew, FFmpeg or Xcode is required to run the packaged app. It is locally/ad-hoc signed, not Apple Developer ID signed or notarized; see the installation guide.
+Requires Apple Silicon and macOS 27.0 or later. The app uses Apple frameworks and needs no Homebrew, FFmpeg or Xcode to run. It is locally/ad-hoc signed and is not Developer ID signed or notarized. See the installation guide if macOS blocks opening it.
 
-## Features
+## What changed in v1.2
 
-- Reconstruct supported recorded OSD, then drag, resize, tint, align or hide groups.
-- Written telemetry line with selectable contents and text fonts.
-- Optional battery, signal, bitrate/history and distance cards; individual/group selection and movement.
-- Custom drone-name text using an imported OSD PNG font.
-- Grid snapping, yellow centre guides and supported Undo/Redo.
-- Playback, source file information and In/Out trimming.
-- 16:9/4:3 framing and Original/2K/4K H.264 or HEVC export, retaining source frame timing.
-- Sequential full-clip batch export, progress, cancellation and reports.
-- Saved/shareable aspect-specific presets and a managed font library.
+- Imports compatible DJI SRT camera metadata and detects it automatically.
+- Displays available DJI camera fields in the written telemetry line, including ISO, Shutter, EV, CT, Colour Profile, Aperture and elapsed recording time.
+- Imports a single SRT normally through **Import SRT Files**.
+- Combines multiple selected DJI SRT chapters automatically for a joined Gyroflow video, saving one matching SRT beside that video. The original chapter files remain unchanged.
+- Adds **Export telemetry alpha only**, producing silent transparent ProRes 4444 MOV overlays.
+- Lets you select Telemetry, recorded OSD and Visuals, then export them together as one alpha overlay or individually as separate alpha movies.
+- Shows alpha-export progress in the app status bar.
 
-## Compatibility and fonts
+## Using v1.2
 
-Tested on an **M4 Pro MacBook Pro** with supplied **BETAFPV P1 / Artlynk** recordings. Other systems and firmware/modes need community testing; opening a video does not imply support for its editable OSD. Intel/Windows/browser builds are not included.
+### P1 / Artlynk recordings
 
-**No OSD font is bundled.** The app recommends the compatible Nexus PNG used with the P1/Betaflight sample and links to Sneaky FPV. Download and import your own font, subject to its creator’s licence.
+Open the recording. The app reads supported embedded OSD and automatically loads a same-name SRT sidecar when one is beside the video. Move, resize, colour or hide recorded OSD groups, select telemetry fields and enable any visual cards. Use **Export video** to bake the chosen overlays into a new MP4.
 
-Personal fonts, presets, recordings and settings are not part of the download. Updating preserves the separate local library; existing P1 OSD Studio libraries can be copied on first launch. Original recordings remain unchanged.
+### DJI camera recordings and Gyroflow exports
+
+Open the original or stabilised video. A matching DJI SRT beside it loads automatically. Otherwise select **Import SRT Files**.
+
+- Select one DJI SRT to use it directly.
+- Select every original DJI SRT chapter for a video that Gyroflow has joined. The app sorts them by recording time, combines them and saves one SRT beside the opened video using the video filename.
+
+Choose the required fields under Telemetry contents. **Elapsed** starts at `00:00:00`, while Recording Time is the camera’s time of day. Save the layout as a preset when you want to reuse it.
+
+### Transparent alpha overlays
+
+Select **Export telemetry alpha only**. Choose the layers you want and choose one combined file or separate files. Place each exported MOV above the matching footage in your editor. Separate alpha movies make it straightforward to enable, disable, reorder or style OSD, telemetry and visuals independently.
+
+## Compatibility
+
+v1.2 has been checked with BETAFPV P1 / Artlynk recordings and a DJI camera-metadata SRT sample. DJI support is for written camera telemetry. It does not extract or edit DJI graphical OSD from video pixels. Existing limits for unverified recording systems, fonts and operating systems continue to apply.
 
 ## Licence and credits
 
-GPL-3.0-or-later. Includes OSD parsing adapted from Alexander van Saase’s Walksnail OSD Tool and ksielick’s Artlynk-capable fork. See LICENSE and THIRD_PARTY_NOTICES.md; corresponding source and build scripts accompany this release. Optional fonts have separate licences.
-
-## Support and testing
-
-The best support is [subscribing to KrisTalksTech on YouTube](https://www.youtube.com/@kristalkstech) for FPV content and reviews. [Optional PayPal support](https://www.paypal.me/krisgleave) is welcome too. The app remains free to use.
-
-Bug reports and compatibility tests are welcome through the issue templates. Please describe your setup before posting samples, and keep private footage, location data and restricted font files out of public issues.
+GPL-3.0-or-later. Recorded-OSD parsing incorporates adapted work from Alexander van Saase’s Walksnail OSD Tool and ksielick’s Artlynk-capable fork. See LICENSE and THIRD_PARTY_NOTICES.md. Optional OSD fonts are separately licensed and not bundled.

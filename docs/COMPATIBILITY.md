@@ -1,6 +1,6 @@
 # Compatibility and validation
 
-## v1.0 release
+## v1.2 release
 
 - **Executable:** ARM64 / Apple Silicon only.
 - **Minimum macOS:** 27.0. Intel and earlier macOS versions are not qualified.
@@ -12,6 +12,7 @@
 | BETAFPV P1 / supported Artlynk H.264 MP4 data | Verified with development samples |
 | Compatible `.osd` sidecars | Reader implemented; genuine Walksnail recordings not yet verified |
 | Other Walksnail versions/modes | Community samples required |
+| DJI camera metadata SRT | Verified with supplied DJI camera SRT sample for written telemetry and chapter combining |
 | DJI / HDZero editable graphical OSD | Not implemented/verified |
 | Burned-in analogue or digital OSD | Cannot be separated from the video picture |
 | Ordinary decodable video | May open, but opening does not establish editable OSD support |

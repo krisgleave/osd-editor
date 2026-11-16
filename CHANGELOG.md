@@ -1,6 +1,15 @@
 # Changelog
 
-## 1.0.1 — 2026-11-06
+## 1.2 — 2026-11-16
+
+- Added DJI camera-metadata SRT import, with ISO, shutter, EV, CT, colour profile, aperture and further recorded camera fields available in the telemetry line.
+- Added elapsed recording time as a DJI telemetry field.
+- Added automatic multi-file DJI SRT combining through Import SRT Files. The combined SRT is saved beside the opened video with its matching filename.
+- Added transparent ProRes 4444 alpha exports with selectable Telemetry, recorded OSD and Visuals layers, available as one combined movie or separate movies.
+- Added alpha-export progress in the main status bar.
+- Updated the DJI import workspace and documentation.
+
+## 1.1 — 2026-11-06
 
 - Made the blue icon background opaque and full-bleed to avoid a second pale tile in the Dock.
 - Retained the approved OSD Editor artwork. Editing and export behaviour are unchanged.

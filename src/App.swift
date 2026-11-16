@@ -22,9 +22,12 @@ func parseSRT(_ text:String)->[Cue] {
   let parts=lines[timeIndex].components(separatedBy:"-->").map{$0.trimmingCharacters(in:.whitespaces)}
   guard parts.count==2 else{return nil}
   let body=lines.dropFirst(timeIndex+1).joined(separator:" ");let ns=body as NSString
+  if let camera = djiValues(body) {
+   return Cue(start:seconds(parts[0]),end:seconds(parts[1]),values:camera)
+  }
   var values=[String:String]()
   for m in expression.matches(in:body,range:NSRange(location:0,length:ns.length)) {values[ns.substring(with:m.range(at:1))]=ns.substring(with:m.range(at:2))}
-  guard !values.isEmpty else{return nil}
+  guard !Set(values.keys).isDisjoint(with:fieldNames) else{return nil}
   return Cue(start:seconds(parts[0]),end:seconds(parts[1]),values:values)
  }.sorted{$0.start < $1.start}
 }
@@ -42,7 +45,7 @@ struct Widget:Codable {
  func text(_ values:[String:String])->String {"\(label): \(values[field] ?? "—")"}
 }
 func initialWidgets()->[Widget] {fieldNames.enumerated().map{Widget(field:$0.element,x:0.025+Double($0.offset%4)*0.245,y:0.84+Double($0.offset/4)*0.07)}}
-struct Layout:Codable {var centreGuides:Bool?;var visuals:[TelemetryVisual]?;var batterySource:String?;var batteryCells:Int?;var batteryRed:Double?;var batteryGreen:Double?;var bitrateRed:Double?;var bitrateGreen:Double?;var widgets=initialWidgets();var line=Widget(field:"line",x:0.12,y:0.96,size:25);var regions=[Region]();var centred:Bool?;var lineAlignment:String?;var cells:[String:CellStyle]?;var outlines:Bool?;var telemetryHidden:Bool?;var presetTitle:String?;var referenceAspect:String?;var aspectRatio:String?;var outputSize:String?;var codec="H.264";var theme="Dark";var gridEnabled:Bool?;var gridColumns:Int?;var osdFontID:String?}
+struct Layout:Codable {var enabledCameraExtras:Set<String>?;var hiddenCameraFields:Set<String>?;var centreGuides:Bool?;var visuals:[TelemetryVisual]?;var batterySource:String?;var batteryCells:Int?;var batteryRed:Double?;var batteryGreen:Double?;var bitrateRed:Double?;var bitrateGreen:Double?;var widgets=initialWidgets();var line=Widget(field:"line",x:0.12,y:0.96,size:25);var regions=[Region]();var centred:Bool?;var lineAlignment:String?;var cells:[String:CellStyle]?;var outlines:Bool?;var telemetryHidden:Bool?;var presetTitle:String?;var referenceAspect:String?;var aspectRatio:String?;var outputSize:String?;var codec="H.264";var theme="Dark";var gridEnabled:Bool?;var gridColumns:Int?;var osdFontID:String?}
 struct Settings:Codable {var layout=Layout();var presets:[String:Layout]=[:];var startup="Default";var fontPath:String?;var fonts:[LibraryFont]?;var legacyOSDFontID:String?}
 func textAttributes(_ w:Widget,_ height:CGFloat)->[NSAttributedString.Key:Any] {
  let scale=height/1080;let shadow=NSShadow();shadow.shadowColor=NSColor.black;shadow.shadowBlurRadius=2*scale;shadow.shadowOffset=NSSize(width:scale,height:-scale)
@@ -102,7 +105,7 @@ final class Preview:NSView {
  var selectedCells=Set<Int>();var availableCells=Set<Int>();var visibleCells=Set<Int>()
  var elementGroups=[Set<Int>]()
  var outlines:[Set<Int>]{let groups=elementGroups.isEmpty ? detectedGroups(availableCells.isEmpty ? visibleCells:availableCells,[:],includeHidden:true):elementGroups;return groups.filter{!$0.isDisjoint(with:visibleCells)}}
- func lineRect()->NSRect{let r=videoRect;let text=telemetryLine(values,layout.widgets);let size=(text as NSString).size(withAttributes:textAttributes(layout.line,r.height));return NSRect(x:r.minX+lineX(layout,text,r.width,r.height),y:r.minY+layout.line.y*r.height,width:size.width,height:size.height)}
+ func lineRect()->NSRect{let r=videoRect;let text=layout.displayLine(values,time:visualTime);let size=(text as NSString).size(withAttributes:textAttributes(layout.line,r.height));return NSRect(x:r.minX+lineX(layout,text,r.width,r.height),y:r.minY+layout.line.y*r.height,width:size.width,height:size.height)}
  func displayBox(_ ids:Set<Int>)->NSRect{let b=cellBounds(ids,layout.cells ?? [:]);let r=videoRect;return NSRect(x:r.minX+b.minX*r.width,y:r.minY+b.minY*r.height,width:b.width*r.width,height:b.height*r.height)}
  var onEditBegin:(()->Void)?;var editStarted=false
  var onSelection:((Set<Int>)->Void)?;var onCellMove:((Double,Double)->Void)?;var onSelectionFinish:(()->Void)?
@@ -126,7 +129,7 @@ final class Preview:NSView {
   let r=videoRect
   NSGraphicsContext.current?.cgContext.saveGState();NSGraphicsContext.current?.cgContext.clip(to:r)
   if let img=frameImage {let crop=centreCrop(sourceSize,layout.aspectRatio,picture:pictureRect);let full=NSRect(x:r.minX-crop.minX/crop.width*r.width,y:r.minY-crop.minY/crop.height*r.height,width:sourceSize.width/crop.width*r.width,height:sourceSize.height/crop.height*r.height);img.draw(in:full,from:.zero,operation:.sourceOver,fraction:1,respectFlipped:true,hints:nil)}
-  else {let text="Open a video to preview its telemetry";let a:[NSAttributedString.Key:Any]=[.font:NSFont.systemFont(ofSize:16),.foregroundColor:NSColor.lightGray];(text as NSString).draw(at:NSPoint(x:r.minX+25,y:r.midY),withAttributes:a)}
+  else if visualCues.isEmpty {let text="Open a video or choose a telemetry SRT";let a:[NSAttributedString.Key:Any]=[.font:NSFont.systemFont(ofSize:16),.foregroundColor:NSColor.lightGray];(text as NSString).draw(at:NSPoint(x:r.minX+25,y:r.midY),withAttributes:a)}
 
   if layout.gridEnabled == true{
    let step=r.width/CGFloat(layout.gridColumns ?? 32);let path=NSBezierPath()
@@ -135,7 +138,7 @@ final class Preview:NSView {
    NSColor.white.withAlphaComponent(0.18).setStroke();path.lineWidth=0.5;path.stroke()
   }
   osdImage?.draw(in:r,from:.zero,operation:.sourceOver,fraction:1,respectFlipped:true,hints:nil)
-  let line=telemetryLine(values,layout.widgets) as NSString
+  let line=layout.displayLine(values,time:visualTime) as NSString
   if layout.telemetryHidden == true{NSGraphicsContext.current?.cgContext.setAlpha(0.25)}
   line.draw(at:NSPoint(x:r.minX+lineX(layout,line as String,r.width,r.height),y:r.minY+layout.line.y*r.height),withAttributes:textAttributes(layout.line,r.height))
   NSGraphicsContext.current?.cgContext.setAlpha(1)
@@ -160,7 +163,7 @@ final class Preview:NSView {
    onTargetSelect?(false);needsDisplay=true;draggingVisual=i;dragging=true;dragOffset=p;return
   }
   selectedVisual=nil;selectedVisuals=[];allVisualsSelected=false
-  if !telemetryLine(values,layout.widgets).isEmpty && lineRect().insetBy(dx:-4,dy:-3).contains(p){telemetrySelected=true;selectedCells=[];onTargetSelect?(true);draggingTelemetry=true;dragging=true;dragOffset=NSPoint(x:p.x-videoRect.minX-lineX(layout,telemetryLine(values,layout.widgets),videoRect.width,videoRect.height),y:p.y-videoRect.minY-layout.line.y*videoRect.height);return}
+  if !layout.displayLine(values,time:visualTime).isEmpty && lineRect().insetBy(dx:-4,dy:-3).contains(p){telemetrySelected=true;selectedCells=[];onTargetSelect?(true);draggingTelemetry=true;dragging=true;dragOffset=NSPoint(x:p.x-videoRect.minX-lineX(layout,layout.displayLine(values,time:visualTime),videoRect.width,videoRect.height),y:p.y-videoRect.minY-layout.line.y*videoRect.height);return}
   telemetrySelected=false;onTargetSelect?(false)
   if !selectedCells.isEmpty && selectedCells.contains(where:{displayBox([$0]).contains(p)}){beginOSDDrag(p);return}
   if let group=outlines.first(where:{displayBox($0).contains(p)}){
@@ -226,12 +229,12 @@ final class TextCache {
 }
 final class App:NSObject,NSApplicationDelegate,NSWindowDelegate {
  var customTextCheck:NSButton?;var customTextEntry:NSTextField?;var visualChecks=[NSButton]();var visualSliders=[NSSlider]();var visualThresholds=[NSTextField]();var batteryVisualSource:NSPopUpButton?;var batteryVisualCells:NSPopUpButton?
- let aspectPopup=NSPopUpButton();let outputSize=NSPopUpButton();let mediaInfo=NSTextField(labelWithString:"");let srtInfo=NSTextField(labelWithString:"");let statusSummary=NSTextField(labelWithString:"");let batchOpen=NSButton(title:"Open batch…",target:nil,action:nil);let batchPicker=NSPopUpButton();let batchLabel=NSTextField(labelWithString:"Single video");var batchSources=[URL]();var batchRunning=false;var batchCancelled=false;var batchIndex=0;var batchResults=[String]();var batchDestination:URL?;var batchPresetName="Default";var batchLayout:Layout?;var batchRenderer:OSDRenderer?
+ let aspectPopup=NSPopUpButton();let outputSize=NSPopUpButton();let mediaInfo=NSTextField(labelWithString:"");let srtInfo=NSTextField(labelWithString:"");let statusSummary=NSTextField(labelWithString:"");let batchOpen=NSButton(title:"Open batch",target:nil,action:nil);let batchPicker=NSPopUpButton();let batchLabel=NSTextField(labelWithString:"Single video");var batchSources=[URL]();var batchRunning=false;var batchCancelled=false;var batchIndex=0;var batchResults=[String]();var batchDestination:URL?;var batchPresetName="Default";var batchLayout:Layout?;var batchRenderer:OSDRenderer?
  let window=NSWindow(contentRect:NSRect(x:0,y:0,width:1220,height:840),styleMask:[.titled,.closable,.miniaturizable,.resizable],backing:.buffered,defer:false)
  let preview=Preview();let status=StatusField(wrappingLabelWithString:"")
  let scrub=NSSlider(value:0,minValue:0,maxValue:1,target:nil,action:nil);let timeLabel=NSTextField(labelWithString:"00:00:00 / 00:00:00")
  let undoMoveButton=NSButton(title:"Undo",target:nil,action:nil);var undoCells:[String:CellStyle]?;var undoLayout:Layout?;var redoLayout:Layout?;var undoPresetName:String?;var redoPresetName:String?;let redoButton=NSButton()
- let selectionChooser=NSSegmentedControl(labels:["None","All OSD","Telemetry","VIS"],trackingMode:.selectOne,target:nil,action:nil);let presetRenameButton=NSButton(title:"Rename…",target:nil,action:nil);let presetDeleteButton=NSButton(title:"Delete",target:nil,action:nil);var trimButtons=[NSButton]()
+ let selectionChooser=NSSegmentedControl(labels:["None","All OSD","Telemetry","VIS"],trackingMode:.selectOne,target:nil,action:nil);let presetRenameButton=NSButton(title:"Rename",target:nil,action:nil);let presetDeleteButton=NSButton(title:"Delete",target:nil,action:nil);var trimButtons=[NSButton]()
  let fullScreenButton=NSButton(title:"Full screen",target:nil,action:nil);let alignReference=NSPopUpButton();let presetManage=NSPopUpButton(frame:.zero,pullsDown:true);var activePresetName="Default"
  let timelineView=TrimTimeline();let playButton=NSButton(title:"Play",target:nil,action:nil);let videoName=NSTextField(labelWithString:"Video: —");let srtName=NSTextField(labelWithString:"SRT: —")
  let makeDefaultButton=NSButton(title:"Make Default",target:nil,action:nil);let presetSaveButton=NSButton(title:"Save",target:nil,action:nil);let presetState=NSTextField(labelWithString:"");var telemetryBaseSize=25.0
@@ -239,13 +242,18 @@ final class App:NSObject,NSApplicationDelegate,NSWindowDelegate {
  let startField=NSTextField(string:"00:00:00");let endField=NSTextField(string:"00:00:00");let rangeLabel=NSTextField(labelWithString:"")
  let verticalAlign=NSSegmentedControl(labels:["Top","Middle","Bottom"],trackingMode:.selectOne,target:nil,action:nil)
  let gridToggle=NSButton(checkboxWithTitle:"Grid & snap",target:nil,action:nil);let gridSize=NSPopUpButton()
- let osdFontPopup=NSPopUpButton();let textFontPopup=NSPopUpButton();let osdFontMenu=NSPopUpButton(frame:.zero,pullsDown:true);let textFontMenu=NSPopUpButton(frame:.zero,pullsDown:true);let osdRename=NSButton(title:"Rename…",target:nil,action:nil);let osdDelete=NSButton(title:"Delete",target:nil,action:nil);let textRename=NSButton(title:"Rename…",target:nil,action:nil);let textDelete=NSButton(title:"Delete",target:nil,action:nil)
+ let osdFontPopup=NSPopUpButton();let textFontPopup=NSPopUpButton();let osdFontMenu=NSPopUpButton(frame:.zero,pullsDown:true);let textFontMenu=NSPopUpButton(frame:.zero,pullsDown:true);let osdRename=NSButton(title:"Rename",target:nil,action:nil);let osdDelete=NSButton(title:"Delete",target:nil,action:nil);let textRename=NSButton(title:"Rename",target:nil,action:nil);let textDelete=NSButton(title:"Delete",target:nil,action:nil)
  var spaceMonitor:Any?;var exactIn=0.0;var exactOut=0.0
  let hideSelectionButton=NSButton(title:"Hide selection",target:nil,action:nil);let showOutlines=NSButton(checkboxWithTitle:"Show detected outlines",target:nil,action:nil);let osdScale=NSSlider(value:20,minValue:4,maxValue:50,target:nil,action:nil);let sizeValue=NSTextField(string:"20");let osdScaleLabel=NSTextField(labelWithString:"Size");let osdColour=NSColorWell();let selectionLabel=NSTextField(labelWithString:"Draw around OSD to select");var lastOSDScale=100.0
  let alignment=NSSegmentedControl(labels:["Left","Centre","Right"],trackingMode:.selectOne,target:nil,action:nil);let resetTint=NSButton(title:"Reset",target:nil,action:nil);let mode=NSPopUpButton();let regionPicker=NSPopUpButton();let hideRegion=NSButton(checkboxWithTitle:"Hide selected OSD region",target:nil,action:nil);let fontStatus=NSTextField(labelWithString:"OSD font: not imported");let field=NSPopUpButton();let size=NSSlider(value:28,minValue:12,maxValue:80,target:nil,action:nil);let xSlider=NSSlider(value:0,minValue:0,maxValue:98,target:nil,action:nil);let ySlider=NSSlider(value:0,minValue:0,maxValue:98,target:nil,action:nil)
  let sizeLabel=NSTextField(labelWithString:"");let xLabel=NSTextField(labelWithString:"");let yLabel=NSTextField(labelWithString:"");let colour=NSColorWell()
  let theme=NSPopUpButton();let codec=NSPopUpButton();let preset=NSPopUpButton();let startup=NSPopUpButton();var checks=[NSButton]()
- let open=NSButton(title:"Open video…",target:nil,action:nil);let match=NSButton(title:"Choose SRT…",target:nil,action:nil);let export=NSButton(title:"Export video…",target:nil,action:nil);let cancel=NSButton(title:"Cancel export",target:nil,action:nil)
+ var fieldRows=NSStackView();var pickerFields=[String]();var importedFields=[String]();var chapterSummary=""
+ var p1VisualSection:NSView?;var djiVisualSection:NSView?;var djiVisualChecks=[NSButton]()
+ var cameraSource=false
+ var writingCamera=false;var alphaExporting=false
+ let cameraExport=NSButton(title:"Export telemetry alpha only",target:nil,action:nil)
+ let open=NSButton(title:"Open video",target:nil,action:nil);let match=NSButton(title:"Import SRT Files",target:nil,action:nil);let export=NSButton(title:"Export video",target:nil,action:nil);let cancel=NSButton(title:"Cancel export",target:nil,action:nil)
  let exportPercent=NSTextField(labelWithString:"");let pauseButton=NSButton();let stopButton=NSButton();let bar=ExportProgress();var settings=Settings();var url:URL?;var asset:AVURLAsset?;var cues=[Cue]();var duration=0.0;var generator:AVAssetImageGenerator?;var imageQueue=DispatchQueue(label:"p1.preview",qos:.userInitiated);var previewGeneration=0
  var osdFrames=[OSDFrame]();var osdRenderer:OSDRenderer?;var loadingOSD=false;var loadToken=0
  var session:AVAssetExportSession?;var progressTimer:Timer?;var lastSRT:URL?;var outputTemp:URL?;var settingsURL:URL!
@@ -268,7 +276,7 @@ final class App:NSObject,NSApplicationDelegate,NSWindowDelegate {
   if let data=try? Data(contentsOf:readSettingsURL),let saved=try? JSONDecoder().decode(Settings.self,from:data),saved.layout.widgets.count==8 {settings=saved}
   migrateLayout(&settings.layout);bootstrapFontLibrary();migratePresetIdentities();applyStartupLayout()
   let menu=NSMenu();let top=NSMenuItem();menu.addItem(top);let appMenu=NSMenu();appMenu.addItem(withTitle:"About OSD Editor",action:#selector(about),keyEquivalent:"");appMenu.addItem(.separator());appMenu.addItem(withTitle:"Quit OSD Editor",action:#selector(NSApplication.terminate(_:)),keyEquivalent:"q");top.submenu=appMenu;NSApp.mainMenu=menu
-  window.title="OSD Editor v1.0.1 — by KrisTalksTech";window.minSize=NSSize(width:1220,height:740);window.collectionBehavior.insert(.fullScreenPrimary);window.center()
+  window.title="OSD Editor v1.2 — by KrisTalksTech";window.minSize=NSSize(width:1220,height:740);window.collectionBehavior.insert(.fullScreenPrimary);window.center()
   let root=NSStackView();root.orientation = .vertical;root.distribution = .fill;root.alignment = .leading;root.spacing=10;root.translatesAutoresizingMaskIntoConstraints=false;window.contentView!.addSubview(root)
   NSLayoutConstraint.activate([root.leadingAnchor.constraint(equalTo:window.contentView!.leadingAnchor,constant:20),root.trailingAnchor.constraint(equalTo:window.contentView!.trailingAnchor,constant:-20),root.topAnchor.constraint(equalTo:window.contentView!.topAnchor,constant:18),root.bottomAnchor.constraint(equalTo:window.contentView!.bottomAnchor,constant:-18)])
   let toolbar=NSStackView();toolbar.spacing=10
@@ -283,7 +291,8 @@ final class App:NSObject,NSApplicationDelegate,NSWindowDelegate {
   for (button,label,info) in [(open,videoName,mediaInfo),(match,srtName,srtInfo)]{
    let row=NSStackView();row.spacing=12;button.widthAnchor.constraint(equalToConstant:112).isActive=true;row.addArrangedSubview(button);label.font = .monospacedSystemFont(ofSize:11,weight:.regular);label.lineBreakMode = .byTruncatingMiddle;label.widthAnchor.constraint(equalToConstant:205).isActive=true;row.addArrangedSubview(label);info.font = .systemFont(ofSize:11);info.textColor = .secondaryLabelColor;info.lineBreakMode = .byTruncatingTail;info.widthAnchor.constraint(equalToConstant:330).isActive=true;row.addArrangedSubview(info)
    if button===open{batchOpen.target=self;batchOpen.action=#selector(openBatch);row.addArrangedSubview(batchOpen)};files.addArrangedSubview(row)
-  };toolbar.insertArrangedSubview(toolPanel(files),at:0)
+  }
+  toolbar.insertArrangedSubview(toolPanel(files),at:0)
   left.addArrangedSubview(preview);preview.widthAnchor.constraint(equalTo:left.widthAnchor).isActive=true
   timelineView.toolTip="Drag IN or OUT to trim; click between them to seek.";timelineView.heightAnchor.constraint(equalToConstant:44).isActive=true;left.addArrangedSubview(timelineView);timelineView.widthAnchor.constraint(equalTo:left.widthAnchor).isActive=true
   timelineView.onSeek = {[weak self] t in self?.pausePlayback();self?.scrub.doubleValue=t;self?.requestPreview()}
@@ -321,16 +330,12 @@ final class App:NSObject,NSApplicationDelegate,NSWindowDelegate {
   let toolsPanel=toolPanel(tools);root.insertArrangedSubview(toolsPanel,at:1);toolsPanel.widthAnchor.constraint(equalTo:root.widthAnchor).isActive=true
 
   let queueControls=NSStackView();queueControls.orientation = .vertical;queueControls.alignment = .leading;queueControls.spacing=6;queueControls.widthAnchor.constraint(equalToConstant:312).isActive=true;batchLabel.font = .systemFont(ofSize:11);queueControls.addArrangedSubview(batchLabel);batchPicker.widthAnchor.constraint(equalToConstant:300).isActive=true;batchPicker.target=self;batchPicker.action=#selector(batchPreviewChanged);queueControls.addArrangedSubview(batchPicker);inspectorStack.addArrangedSubview(boxedSection("Videos",queueControls))
-  let telemetryControls=NSStackView();telemetryControls.orientation = .vertical;telemetryControls.alignment = .leading;telemetryControls.spacing=8;telemetryControls.widthAnchor.constraint(equalToConstant:312).isActive=true
-  let toggles=NSStackView();toggles.orientation = .vertical;toggles.spacing=4;toggles.distribution = .fillEqually
-  for i in stride(from:0,to:labels.count,by:3){let row=NSStackView();row.distribution = .fillEqually;row.spacing=8
-   for j in i..<min(i+3,labels.count){let check=NSButton(checkboxWithTitle:labels[j],target:self,action:#selector(toggle(_:)));check.font = .systemFont(ofSize:11);check.tag=j;checks.append(check);row.addArrangedSubview(check)}
-   if row.arrangedSubviews.count<3{row.addArrangedSubview(NSView())}
-   toggles.addArrangedSubview(row);row.widthAnchor.constraint(equalTo:toggles.widthAnchor).isActive=true
-  }
-  telemetryControls.addArrangedSubview(toggles);toggles.widthAnchor.constraint(equalTo:telemetryControls.widthAnchor).isActive=true;toggles.heightAnchor.constraint(equalToConstant:74).isActive=true
+  cameraExport.target=self;cameraExport.action=#selector(exportCameraLine);let telemetryControls=NSStackView();telemetryControls.orientation = .vertical;telemetryControls.alignment = .leading;telemetryControls.spacing=8;telemetryControls.widthAnchor.constraint(equalToConstant:312).isActive=true
+  fieldRows.orientation = .vertical;fieldRows.alignment = .leading;fieldRows.spacing=6
+  telemetryControls.addArrangedSubview(fieldRows)
   inspectorStack.addArrangedSubview(boxedSection("Telemetry contents",telemetryControls))
-  inspectorStack.addArrangedSubview(boxedSection("Telemetry visuals",buildVisualControls()))
+  let p1Visuals=boxedSection("Telemetry visuals",buildVisualControls());p1VisualSection=p1Visuals;inspectorStack.addArrangedSubview(p1Visuals)
+  let djiVisuals=boxedSection("Camera visuals",buildCameraVisualControls());djiVisuals.isHidden=true;djiVisualSection=djiVisuals;inspectorStack.addArrangedSubview(djiVisuals)
   let fontControls=NSStackView();fontControls.orientation = .vertical;fontControls.alignment = .leading;fontControls.spacing=8;fontControls.widthAnchor.constraint(equalToConstant:312).isActive=true
   for (title,popup,kind,menu) in [("OSD",osdFontPopup,"osd",osdFontMenu),("Text",textFontPopup,"text",textFontMenu)]{
    let row=NSStackView();row.spacing=6;let label=NSTextField(labelWithString:title);label.widthAnchor.constraint(equalToConstant:33).isActive=true;row.addArrangedSubview(label)
@@ -339,14 +344,14 @@ final class App:NSObject,NSApplicationDelegate,NSWindowDelegate {
    for (name,action) in [("Import…",kind=="osd" ? #selector(importFont):#selector(importTextFont)),("Rename…",kind=="osd" ? #selector(renameOSDFont):#selector(renameTextFont)),("Delete",kind=="osd" ? #selector(deleteOSDFont):#selector(deleteTextFont))]{menu.addItem(withTitle:name);menu.lastItem?.target=self;menu.lastItem?.action=action}
    menu.toolTip=title+" font: import, rename or delete";row.addArrangedSubview(menu);fontControls.addArrangedSubview(row)
   }
-  let fontHelp=NSButton(title:"Get OSD fonts…",target:self,action:#selector(openFontWebsite));fontHelp.toolTip="Open Sneaky FPV’s font website";fontControls.addArrangedSubview(fontHelp)
+  let fontHelp=NSButton(title:"Get OSD fonts",target:self,action:#selector(openFontWebsite));fontHelp.toolTip="Open Sneaky FPV’s font website";fontControls.addArrangedSubview(fontHelp)
   inspectorStack.addArrangedSubview(boxedSection("Fonts",fontControls))
   let timeFields=NSStackView();timeFields.spacing=8
   for (label,field) in [("In",startField),("Out",endField)]{let name=NSTextField(labelWithString:label);name.font = .systemFont(ofSize:11);timeFields.addArrangedSubview(name);timeFields.addArrangedSubview(field);field.widthAnchor.constraint(equalToConstant:80).isActive=true;field.font = .monospacedDigitSystemFont(ofSize:11,weight:.regular);field.target=self;field.action=#selector(rangeEdited(_:))}
   rangeLabel.font = .systemFont(ofSize:11);rangeLabel.lineBreakMode = .byTruncatingTail;rangeLabel.setContentCompressionResistancePriority(.defaultLow,for:.horizontal);timeFields.addArrangedSubview(rangeLabel);transport.insertArrangedSubview(timeFields,at:5)
   let presetControls=NSStackView();presetControls.orientation = .vertical;presetControls.alignment = .leading;presetControls.spacing=8;presetControls.widthAnchor.constraint(equalToConstant:312).isActive=true
   preset.target=self;preset.action=#selector(presetSelected);let presetRow=NSStackView();presetRow.spacing=6;presetRow.addArrangedSubview(preset);preset.widthAnchor.constraint(equalToConstant:168).isActive=true
-  presetSaveButton.target=self;presetSaveButton.action=#selector(overwritePreset);presetSaveButton.isEnabled=false;presetRow.addArrangedSubview(presetSaveButton);presetRow.addArrangedSubview(NSButton(title:"Save as…",target:self,action:#selector(savePreset)));presetControls.addArrangedSubview(presetRow)
+  presetSaveButton.target=self;presetSaveButton.action=#selector(overwritePreset);presetSaveButton.isEnabled=false;presetRow.addArrangedSubview(presetSaveButton);presetRow.addArrangedSubview(NSButton(title:"Save as",target:self,action:#selector(savePreset)));presetControls.addArrangedSubview(presetRow)
   let editPresets=NSStackView();editPresets.spacing=12;presetRenameButton.target=self;presetRenameButton.action=#selector(renamePreset);presetDeleteButton.target=self;presetDeleteButton.action=#selector(deletePreset);configureIcon(presetRenameButton,"pencil","Rename preset");configureIcon(presetDeleteButton,"trash","Delete preset");editPresets.addArrangedSubview(presetRenameButton);editPresets.addArrangedSubview(presetDeleteButton);presetControls.addArrangedSubview(editPresets)
   for (symbol,label,action) in [("square.and.arrow.down","Import preset",#selector(importPreset)),("square.and.arrow.up","Export preset",#selector(exportPreset))]{let button=NSButton();button.target=self;button.action=action;configureIcon(button,symbol,label);editPresets.addArrangedSubview(button)}
   makeDefaultButton.target=self;makeDefaultButton.action=#selector(makePresetDefault);editPresets.addArrangedSubview(makeDefaultButton)
@@ -363,7 +368,7 @@ final class App:NSObject,NSApplicationDelegate,NSWindowDelegate {
   let footer=NSStackView();footer.spacing=10;codec.addItems(withTitles:["H.264","HEVC"]);codec.target=self;codec.action=#selector(codecChanged);footer.addArrangedSubview(NSTextField(labelWithString:"Export format"));footer.addArrangedSubview(codec);outputSize.addItems(withTitles:["Original","2K · 1440p","4K · 2160p"]);outputSize.target=self;outputSize.action=#selector(outputSizeChanged);footer.addArrangedSubview(outputSize);footer.addArrangedSubview(NSTextField(labelWithString:"Frame"));aspectPopup.addItems(withTitles:["16:9","4:3","Source"]);aspectPopup.target=self;aspectPopup.action=#selector(aspectChanged);aspectPopup.setAccessibilityLabel("Output aspect ratio");footer.addArrangedSubview(aspectPopup)
   let footerSpace=NSView();footerSpace.setContentHuggingPriority(.defaultLow,for:.horizontal);footer.addArrangedSubview(footerSpace)
   bar.isHidden=true;bar.isIndeterminate=false;bar.minValue=0;bar.maxValue=100;bar.widthAnchor.constraint(equalToConstant:220).isActive=true;
-  cancel.target=self;cancel.action=#selector(cancelExport);cancel.isHidden=true;footer.addArrangedSubview(cancel);export.target=self;export.action=#selector(exportVideo);footer.addArrangedSubview(export);footer.addArrangedSubview(NSButton(title:"Close",target:self,action:#selector(closeApp)));root.addArrangedSubview(footer);footer.widthAnchor.constraint(equalTo:root.widthAnchor).isActive=true
+  cancel.target=self;cancel.action=#selector(cancelExport);cancel.isHidden=true;footer.addArrangedSubview(cancel);cameraExport.title="Export telemetry alpha only";footer.addArrangedSubview(cameraExport);export.target=self;export.action=#selector(exportVideo);footer.addArrangedSubview(export);footer.addArrangedSubview(NSButton(title:"Close",target:self,action:#selector(closeApp)));root.addArrangedSubview(footer);footer.widthAnchor.constraint(equalTo:root.widthAnchor).isActive=true
   let statusRow=NSStackView();statusRow.spacing=12;status.font = .systemFont(ofSize:11);status.textColor = .secondaryLabelColor;status.maximumNumberOfLines=1;status.lineBreakMode = .byTruncatingMiddle;statusSummary.font = .systemFont(ofSize:10);statusSummary.textColor = .secondaryLabelColor;statusRow.addArrangedSubview(statusSummary);statusRow.addArrangedSubview(status);status.setContentCompressionResistancePriority(.defaultLow,for:.horizontal);let statusSpace=NSView();statusSpace.setContentHuggingPriority(.defaultLow,for:.horizontal);statusRow.addArrangedSubview(statusSpace);statusRow.addArrangedSubview(bar);exportPercent.font = .monospacedDigitSystemFont(ofSize:11,weight:.medium);exportPercent.widthAnchor.constraint(equalToConstant:40).isActive=true;statusRow.addArrangedSubview(exportPercent);bar.heightAnchor.constraint(equalToConstant:16).isActive=true;statusRow.heightAnchor.constraint(equalToConstant:18).isActive=true;let statusPanel=toolPanel(statusRow,verticalPadding:3);statusPanel.identifier=NSUserInterfaceItemIdentifier("statusBar");statusPanel.heightAnchor.constraint(equalToConstant:24).isActive=true;statusPanel.setContentHuggingPriority(.required,for:.vertical);root.addArrangedSubview(statusPanel);statusPanel.widthAnchor.constraint(equalTo:root.widthAnchor).isActive=true
 
 
@@ -383,7 +388,7 @@ final class App:NSObject,NSApplicationDelegate,NSWindowDelegate {
   if let i=CommandLine.arguments.firstIndex(of:"--preview-video"),CommandLine.arguments.count>i+1{loadVideo(URL(fileURLWithPath:CommandLine.arguments[i+1]))}
   if let i=CommandLine.arguments.firstIndex(of:"--preview-batch"),CommandLine.arguments.count>i+2{let files=[URL(fileURLWithPath:CommandLine.arguments[i+1]),URL(fileURLWithPath:CommandLine.arguments[i+2])];setBatchSources(files);loadVideo(files[0])}
   if !CommandLine.arguments.contains(where:{$0.hasSuffix("-test")}){
-   DispatchQueue.main.async{[weak self] in guard let self=self,self.osdRenderer==nil else{return};let alert=NSAlert();alert.messageText="Import an OSD font";alert.informativeText="Recommended for the tested P1 / Betaflight recordings: Sneaky FPV Nexus, Walksnail Betaflight version. For 1080p footage choose the _36.png file, such as WS_BTFL_Nexus_36.png.\n\nGet OSD fonts… opens Sneaky FPV’s website. Download and extract the font pack, then use Import font… here to select its PNG. Please follow the font creator’s licence terms. No font is bundled with this app.\n\nImported fonts are copied into your own library. Telemetry text uses a separate text font.";alert.addButton(withTitle:"Import font…");alert.addButton(withTitle:"Get OSD fonts…");alert.addButton(withTitle:"Later");let websiteButton=alert.buttons[1];websiteButton.target=self;websiteButton.action=#selector(self.openFontWebsite);let response=alert.runModal();if response == .alertFirstButtonReturn{self.importFont()}}
+   DispatchQueue.main.async{[weak self] in guard let self=self,self.osdRenderer==nil else{return};let alert=NSAlert();alert.messageText="Import an OSD font";alert.informativeText="Recommended for the tested P1 / Betaflight recordings: Sneaky FPV Nexus, Walksnail Betaflight version. For 1080p footage choose the _36.png file, such as WS_BTFL_Nexus_36.png.\n\nGet OSD fonts opens Sneaky FPV’s website. Download and extract the font pack, then use Import font here to select its PNG. Please follow the font creator’s licence terms. No font is bundled with this app.\n\nImported fonts are copied into your own library. Telemetry text uses a separate text font.";alert.addButton(withTitle:"Import font");alert.addButton(withTitle:"Get OSD fonts");alert.addButton(withTitle:"Later");let websiteButton=alert.buttons[1];websiteButton.target=self;websiteButton.action=#selector(self.openFontWebsite);let response=alert.runModal();if response == .alertFirstButtonReturn{self.importFont()}}
   }
 
  }
@@ -413,8 +418,8 @@ final class App:NSObject,NSApplicationDelegate,NSWindowDelegate {
 
  func save(){do{try JSONEncoder().encode(settings).write(to:settingsURL,options:.atomic);updatePresetSaveState()}catch{status.stringValue="Couldn’t save settings: \(error.localizedDescription)"}}
  func applyTheme(){switch settings.layout.theme {case "Dark":window.appearance=NSAppearance(named:.darkAqua);case "Light":window.appearance=NSAppearance(named:.aqua);default:window.appearance=nil}}
- func refreshUI(){refreshVisualControls();syncPreview();for (i,c) in checks.enumerated(){c.state=settings.layout.widgets[i].enabled ? .on:.off};theme.selectItem(withTitle:settings.layout.theme);codec.selectItem(withTitle:settings.layout.codec);outputSize.selectItem(withTitle:settings.layout.outputSize ?? "Original");applyTheme();updateInspector();refreshPresets();refreshFontMenus();selectionChanged();updateEnabled()}
- func updateEnabled(){let idle=session==nil && !batchRunning;let trim=idle && batchSources.count<2;bar.isHidden=idle;timelineView.isHidden=asset==nil;playButton.isEnabled=asset != nil && idle;pauseButton.isEnabled=asset != nil && idle;stopButton.isEnabled=asset != nil && idle;exportPercent.isHidden=idle;startField.isEnabled=asset != nil && trim;endField.isEnabled=asset != nil && trim;trimButtons.forEach{$0.isEnabled=asset != nil && trim};timelineView.trimmingEnabled=trim;batchOpen.isEnabled=idle;batchPicker.isEnabled=idle;outputSize.isEnabled=idle;aspectPopup.isEnabled=idle && asset != nil && !loadingOSD;codec.isEnabled=idle;export.title=batchSources.count>1 ? "Export all \(batchSources.count) videos…":"Export video…";open.isEnabled=idle;match.isEnabled=idle && batchSources.count<2;export.isEnabled=idle && !loadingOSD && asset != nil && (batchSources.count>1 || !cues.isEmpty || (!osdFrames.isEmpty && osdRenderer != nil));cancel.isHidden=idle}
+ func refreshUI(){refreshVisualControls();syncPreview();refreshCameraControls();theme.selectItem(withTitle:settings.layout.theme);codec.selectItem(withTitle:settings.layout.codec);outputSize.selectItem(withTitle:settings.layout.outputSize ?? "Original");applyTheme();updateInspector();refreshPresets();refreshFontMenus();selectionChanged();updateEnabled()}
+ func updateEnabled(){let idle=session==nil && !batchRunning && !alphaExporting;let trim=idle && batchSources.count<2;bar.isHidden=idle;timelineView.isHidden=asset==nil && !cameraSource;playButton.isEnabled=asset != nil && idle;pauseButton.isEnabled=asset != nil && idle;stopButton.isEnabled=asset != nil && idle;exportPercent.isHidden=idle;startField.isEnabled=asset != nil && trim;endField.isEnabled=asset != nil && trim;trimButtons.forEach{$0.isEnabled=asset != nil && trim};timelineView.trimmingEnabled=trim && asset != nil;batchOpen.isEnabled=idle;batchPicker.isEnabled=idle;outputSize.isEnabled=idle;aspectPopup.isEnabled=idle && asset != nil && !loadingOSD;codec.isEnabled=idle;export.title=batchSources.count>1 ? "Export all \(batchSources.count) videos":"Export video";open.isEnabled=idle;match.isEnabled=idle && batchSources.count<2;export.isEnabled=idle && !loadingOSD && asset != nil && (batchSources.count>1 || !cues.isEmpty || (!osdFrames.isEmpty && osdRenderer != nil));cancel.isHidden=idle}
  func layoutData(_ layout:Layout)->Data{var normalized=layout;normalized.presetTitle=nil;normalized.referenceAspect=presetAspect(layout);let e=JSONEncoder();e.outputFormatting = .sortedKeys;return (try? e.encode(normalized)) ?? Data()}
  func defaultLayout()->Layout{var l=Layout();l.osdFontID=settings.legacyOSDFontID ?? fonts("osd").first?.id;migrateLayout(&l);return l}
  func presetDefinition(_ name:String)->Layout?{name=="Default" ? defaultLayout():settings.presets[name]}
@@ -467,7 +472,7 @@ final class App:NSObject,NSApplicationDelegate,NSWindowDelegate {
  }
 
 
- func syncPreview(){if let columns=settings.layout.gridColumns,[16,24].contains(columns){settings.layout.gridColumns=32};if var visuals=settings.layout.visuals,visuals.count==3{if visuals[0].kind=="Battery"{visuals[0].kind="SBat";if settings.layout.batterySource=="GBat"{visuals[0].enabled=false;var ground=defaultVisuals()[3];ground.enabled=true;visuals.append(ground)}else{visuals.append(defaultVisuals()[3])}}else{visuals.append(defaultVisuals()[3])};settings.layout.visuals=visuals};if var visuals=settings.layout.visuals,visuals.count==4{visuals.append(defaultVisuals()[4]);settings.layout.visuals=visuals};if var visuals=settings.layout.visuals,visuals.count==5{visuals.append(defaultVisuals()[5]);settings.layout.visuals=visuals};preview.visualCues=cues;preview.visualTime=scrub.doubleValue;preview.layout=settings.layout;refreshAspectPopup();preview.visibleCells=Set(osdAt(scrub.doubleValue,osdFrames).filter{osdRenderer?.glyphs.indices.contains($0.index) == true}.map{$0.y*53+$0.x});if let renderer=osdRenderer{preview.osdImage=renderer.preview(scrub.doubleValue,osdFrames,settings.layout.cells ?? [:],preview.canvasSize,custom:settings.layout.visuals?.first{$0.kind=="Custom"})}else{preview.osdImage=nil};preview.needsDisplay=true}
+ func syncPreview(){refreshCameraControls();p1VisualSection?.isHidden=cameraSource;djiVisualSection?.isHidden=true;if let columns=settings.layout.gridColumns,[16,24].contains(columns){settings.layout.gridColumns=32};if !cameraSource {if var visuals=settings.layout.visuals,visuals.count==3{if visuals[0].kind=="Battery"{visuals[0].kind="SBat";if settings.layout.batterySource=="GBat"{visuals[0].enabled=false;var ground=defaultVisuals()[3];ground.enabled=true;visuals.append(ground)}else{visuals.append(defaultVisuals()[3])}}else{visuals.append(defaultVisuals()[3])};settings.layout.visuals=visuals};if var visuals=settings.layout.visuals,visuals.count==4{visuals.append(defaultVisuals()[4]);settings.layout.visuals=visuals};if var visuals=settings.layout.visuals,visuals.count==5{visuals.append(defaultVisuals()[5]);settings.layout.visuals=visuals}};preview.visualCues=cues;preview.visualTime=scrub.doubleValue;preview.layout=settings.layout;refreshAspectPopup();preview.visibleCells=Set(osdAt(scrub.doubleValue,osdFrames).filter{osdRenderer?.glyphs.indices.contains($0.index) == true}.map{$0.y*53+$0.x});if let renderer=osdRenderer{preview.osdImage=renderer.preview(scrub.doubleValue,osdFrames,settings.layout.cells ?? [:],preview.canvasSize,custom:settings.layout.visuals?.first{$0.kind=="Custom"})}else{preview.osdImage=nil};preview.needsDisplay=true}
  @objc func outlinesChanged(){settings.layout.centreGuides=showOutlines.state == .on;showOutlines.contentTintColor=showOutlines.state == .on ? .systemBlue:nil;save();syncPreview()}
  func selectionChanged(){
   selectionChooser.selectedSegment=preview.telemetrySelected ? 2:(preview.selectedCells.isEmpty ? 0:(preview.selectedCells==preview.availableCells ? 1:-1));selectionChooser.setEnabled(!preview.availableCells.isEmpty,forSegment:1);selectionChooser.setEnabled(!cues.isEmpty,forSegment:2)
@@ -546,7 +551,7 @@ final class App:NSObject,NSApplicationDelegate,NSWindowDelegate {
   guard preview.telemetrySelected || !preview.selectedCells.isEmpty else{return};rememberMove()
   if preview.telemetrySelected{
    if let h=horizontal{settings.layout.lineAlignment=["Left","Centre","Right"][h];settings.layout.centred=h==1}
-   if let v=vertical{let text=telemetryLine(preview.values,settings.layout.widgets);let height=(text as NSString).size(withAttributes:textAttributes(settings.layout.line,1080)).height/1080;settings.layout.line.y=v==0 ? 0.02:(v==1 ? (1-height)/2:0.98-height)}
+   if let v=vertical{let text=settings.layout.displayLine(preview.values,time:preview.visualTime);let height=(text as NSString).size(withAttributes:textAttributes(settings.layout.line,1080)).height/1080;settings.layout.line.y=v==0 ? 0.02:(v==1 ? (1-height)/2:0.98-height)}
   }else{
    var cells=settings.layout.cells ?? [:];let b=cellBounds(preview.selectedCells,cells)
    let groups=preview.outlines.filter{!$0.isDisjoint(with:preview.selectedCells)}
@@ -567,11 +572,18 @@ final class App:NSObject,NSApplicationDelegate,NSWindowDelegate {
  @objc func alignmentChanged(){guard alignment.selectedSegment>=0 else{return};alignSelection(alignment.selectedSegment,nil)}
  @objc func verticalAlignmentChanged(){guard verticalAlign.selectedSegment>=0 else{return};alignSelection(nil,verticalAlign.selectedSegment)}
  @objc func openFontWebsite(){NSWorkspace.shared.open(URL(string:"https://sites.google.com/view/sneaky-fpv/home")!)}
- @objc func about(){let a=NSAlert();a.messageText="OSD Editor v1.0.1 — by KrisTalksTech";a.informativeText="Copyright © 2026 Kris Gleave (KrisTalksTech).\n\nEdit recorded FPV OSD, telemetry and video. Tested with BETAFPV P1 / Artlynk recordings. Other systems are not yet verified.\n\nFree software under GPL-3.0-or-later; redistribution and modification are permitted under that licence. Provided WITHOUT ANY WARRANTY.\n\nIncludes OSD parsing adapted from ksielick/walksnail-osd-tool and Alexander van Saase’s upstream project. See Credits for provenance. Fonts have separate licences and are not bundled.";a.addButton(withTitle:"OK");a.addButton(withTitle:"Licence");a.addButton(withTitle:"Credits");let response=a.runModal();let name=response == .alertSecondButtonReturn ? "LICENSE":(response == .alertThirdButtonReturn ? "THIRD_PARTY_NOTICES":nil);if let name=name,let url=Bundle.main.url(forResource:name,withExtension:"txt"){NSWorkspace.shared.open(url)}}
+ @objc func about(){let a=NSAlert();a.messageText="OSD Editor v1.2.0 — by KrisTalksTech";a.informativeText="Copyright © 2026 Kris Gleave (KrisTalksTech).\n\nEdit recorded FPV OSD, telemetry and video. Supports BETAFPV P1 / Artlynk telemetry and DJI camera SRT files.\n\nFree software under GPL-3.0-or-later; redistribution and modification are permitted under that licence. Provided WITHOUT ANY WARRANTY.\n\nIncludes OSD parsing adapted from ksielick/walksnail-osd-tool and Alexander van Saase’s upstream project. See Credits for provenance. Fonts have separate licences and are not bundled.";a.addButton(withTitle:"OK");a.addButton(withTitle:"Licence");a.addButton(withTitle:"Credits");let response=a.runModal();let name=response == .alertSecondButtonReturn ? "LICENSE":(response == .alertThirdButtonReturn ? "THIRD_PARTY_NOTICES":nil);if let name=name,let url=Bundle.main.url(forResource:name,withExtension:"txt"){NSWorkspace.shared.open(url)}}
 
  @objc func changeTheme(){settings.layout.theme=theme.titleOfSelectedItem ?? "Dark";applyTheme();save()}
  @objc func codecChanged(){var proposed=settings.layout;proposed.codec=codec.titleOfSelectedItem ?? "H.264";if let asset=asset{guard let compatible=compatibleExportLayout(proposed,asset) else{codec.selectItem(withTitle:settings.layout.codec);return};proposed=compatible};settings.layout=proposed;codec.selectItem(withTitle:proposed.codec);save()}
- @objc func toggle(_ sender:NSButton){settings.layout.widgets[sender.tag].enabled=sender.state == .on;syncPreview();save()}
+ @objc func toggle(_ sender:NSButton){if cameraSource {
+   var hidden=settings.layout.hiddenCameraFields ?? []
+   let key=pickerFields[sender.tag]
+   if key=="Colour Profile" {hidden.remove("Colour mode")}
+   if !primaryFields.contains(key) { var extras=settings.layout.enabledCameraExtras ?? [];if sender.state == .on {extras.insert(key)} else {extras.remove(key)};settings.layout.enabledCameraExtras=extras }
+   if sender.state == .on {hidden.remove(key)} else {hidden.insert(key)}
+   settings.layout.hiddenCameraFields=hidden
+  } else {settings.layout.widgets[sender.tag].enabled=sender.state == .on};syncPreview();save()}
  @objc func selectField(){updateInspector()}
  @objc func styleChanged(){settings.layout.line.size=size.doubleValue;save();syncPreview();updateInspector()}
  @objc func positionChanged(_ sender:NSSlider){if sender===xSlider{settings.layout.centred=false;settings.layout.lineAlignment="Custom"};settings.layout.line.x=xSlider.doubleValue/100;settings.layout.line.y=ySlider.doubleValue/100;save();syncPreview();updateInspector()}
@@ -596,7 +608,7 @@ final class App:NSObject,NSApplicationDelegate,NSWindowDelegate {
   scrub.maxValue=duration;scrub.doubleValue=0;fullVideo()
   let same=u.deletingPathExtension().appendingPathExtension("srt");let siblings=(try? FileManager.default.contentsOfDirectory(at:u.deletingLastPathComponent(),includingPropertiesForKeys:nil)) ?? []
   let match=FileManager.default.fileExists(atPath:same.path) ? same:siblings.first{$0.pathExtension.lowercased()=="srt" && $0.deletingPathExtension().lastPathComponent.caseInsensitiveCompare(u.deletingPathExtension().lastPathComponent) == .orderedSame}
-  cues=[];lastSRT=nil;if let m=match{loadSRT(m)}else{status.stringValue="\(u.lastPathComponent) opened. No matching SRT found; use Choose SRT."};updateFileLabels();startOSD(u);updateEnabled();requestPreview()
+  chapterSummary="";cameraSource=false;cues=[];lastSRT=nil;if let m=match{loadSRT(m)}else{status.stringValue="\(u.lastPathComponent) opened. No matching SRT found; use Import SRT Files."};updateFileLabels();startOSD(u);updateEnabled();requestPreview()
  }
 
  func startOSD(_ video:URL){
@@ -609,13 +621,55 @@ final class App:NSObject,NSApplicationDelegate,NSWindowDelegate {
    DispatchQueue.main.async{guard token==self.loadToken else{return};self.loadingOSD=false;self.preview.pictureRect=picture;self.osdFrames=result;self.preview.availableCells=Set(result.flatMap{$0.glyphs.map{$0.y*53+$0.x}});self.preview.elementGroups=recordingElements(result);self.preview.selectedCells=[];self.refreshPresets();self.selectionChanged();self.status.stringValue=(result.isEmpty ? "No OSD data found. ":"")+(self.osdRenderer == nil && !result.isEmpty ? "Choose an OSD font in Fonts. ":"")+(self.cues.isEmpty ? "No SRT loaded.":"");if self.scrub.doubleValue==0,let first=result.first,first.time>0{self.scrub.doubleValue=min(self.duration,first.time);self.requestPreview()}else{self.syncPreview()};self.updateEnabled()}
   }
  }
- @objc func chooseSRT(){pausePlayback();let p=NSOpenPanel();p.allowedContentTypes=[UTType(filenameExtension:"srt") ?? .plainText];guard p.runModal() == .OK,let u=p.url else{return};loadSRT(u);requestPreview()}
- func loadSRT(_ u:URL){do{let parsed=parseSRT(try String(contentsOf:u,encoding:.utf8));guard !parsed.isEmpty else{throw NSError(domain:"P1",code:1,userInfo:[NSLocalizedDescriptionKey:"No recognised telemetry readings found."])};cues=parsed;lastSRT=u;let keys=Set(parsed.flatMap{$0.values.keys});status.stringValue=""}catch{cues=[];lastSRT=nil;status.stringValue="Couldn’t load SRT: \(error.localizedDescription)"};updateFileLabels();updateEnabled()}
+ @objc func chooseSRT(){
+  pausePlayback()
+  let panel=NSOpenPanel()
+  panel.allowsMultipleSelection=true
+  panel.allowedContentTypes=[UTType(filenameExtension:"srt") ?? .plainText]
+  panel.message="Select one SRT to import, or multiple DJI chapters to combine."
+  guard panel.runModal() == .OK else{return}
+  if panel.urls.count == 1 {loadSRTFiles(panel.urls)}
+  else {
+   guard let video=url else {status.stringValue="Open the joined video first, then import its DJI SRT chapters.";return}
+   do {
+    let chapters=try readChapters(panel.urls)
+    let output=video.deletingPathExtension().appendingPathExtension("srt")
+    guard !FileManager.default.fileExists(atPath:output.path) else {throw Problem("\(output.lastPathComponent) already exists. Rename or move it, then import again.")}
+    try combinedSRTText(chapters).write(to:output,atomically:true,encoding:.utf8)
+    loadSRTFiles([output])
+    let alert=NSAlert();alert.messageText="SRT files combined";alert.informativeText="\(chapters.count) SRT files were combined into \(output.lastPathComponent).\n\nSaved in \(video.deletingLastPathComponent().path)";alert.addButton(withTitle:"OK");alert.runModal()
+   } catch {status.stringValue="Couldn’t combine SRT files: \(error.localizedDescription)"}
+  }
+  requestPreview()
+ }
+ func loadSRT(_ u:URL){loadSRTFiles([u])}
+ func loadSRTFiles(_ urls:[URL]){
+  do {
+   let chapters=try readChapters(urls)
+   let joined=joinedCues(chapters)
+   let summary=chapterListing(chapters)
+   if chapters.count>1 {
+    let alert=NSAlert()
+    alert.messageText="Import these DJI chapters in flight order?"
+    alert.informativeText=summary
+    if asset != nil { alert.informativeText += String(format:"\n\nTelemetry %.3f s · Video %.3f s",joined.last!.end,duration) }
+    alert.addButton(withTitle:"Import chapters");alert.addButton(withTitle:"Cancel")
+    guard alert.runModal() == .alertFirstButtonReturn else{return}
+   }
+   cues=joined;lastSRT=chapters[0].url
+   cameraSource=joined.contains{isCamera($0.values)}
+   importedFields=cameraSource ? orderedCameraFields(joined.reduce(into:Set<String>()){ $0.formUnion($1.values.keys) }) + ["Elapsed"] : []
+   chapterSummary=chapters.count>1 ? summary:""
+   if asset == nil {duration=joined.last!.end;scrub.maxValue=duration;scrub.doubleValue=0;fullVideo()}
+   status.stringValue=""
+  } catch {status.stringValue="Couldn’t import SRT: "+error.localizedDescription}
+  updateFileLabels();updateEnabled()
+ }
  @objc func scrubChanged(){pausePlayback();requestPreview()}
  func requestPreview(){updateTimeline();let t=scrub.doubleValue;player?.seek(to:CMTime(seconds:t,preferredTimescale:60000),toleranceBefore:.zero,toleranceAfter:.zero);preview.values=valuesAt(t,cues);syncPreview();timeLabel.stringValue="\(clock(t)) / \(clock(duration))";guard let gen=generator else{return};previewGeneration+=1;let token=previewGeneration
   imageQueue.async {let image=try? gen.copyCGImage(at:CMTime(seconds:t,preferredTimescale:600),actualTime:nil);DispatchQueue.main.async{guard token==self.previewGeneration else{return};if let cg=image{self.preview.frameImage=NSImage(cgImage:cg,size:.zero);self.preview.needsDisplay=true}}}
  }
- func updateFileLabels(){srtName.stringValue=lastSRT.map{$0.lastPathComponent} ?? "SRT: none loaded";srtName.toolTip=lastSRT?.path;if let srt=lastSRT{let bytes=((try? srt.resourceValues(forKeys:[.fileSizeKey]))?.fileSize) ?? 0;srtInfo.stringValue="\(cues.count) samples · \(rangeTime(cues.last?.end ?? 0)) · \(ByteCountFormatter.string(fromByteCount:Int64(bytes),countStyle:.file))";srtInfo.toolTip=srtInfo.stringValue}else{srtInfo.stringValue="No matching telemetry loaded"}}
+ func updateFileLabels(){refreshCameraControls();srtName.stringValue=lastSRT.map{$0.lastPathComponent} ?? "SRT: none loaded";srtName.toolTip=lastSRT?.path;if !chapterSummary.isEmpty {srtName.stringValue="Joined DJI chapters (\(chapterSummary.components(separatedBy:"\n").count))";srtName.toolTip=chapterSummary};if let srt=lastSRT{let bytes=((try? srt.resourceValues(forKeys:[.fileSizeKey]))?.fileSize) ?? 0;srtInfo.stringValue="\(cameraSource ? "DJI camera" : "P1 telemetry") · \(cues.count) samples · \(rangeTime(cues.last?.end ?? 0)) · \(ByteCountFormatter.string(fromByteCount:Int64(bytes),countStyle:.file))";if !chapterSummary.isEmpty {srtInfo.stringValue="DJI camera · \(cues.count) samples · \(rangeTime(cues.last?.end ?? 0))"};srtInfo.toolTip=srtInfo.stringValue}else{srtInfo.stringValue="No matching telemetry loaded"}}
  @objc func pauseMedia(){pausePlayback()}
  @objc func stopMedia(){pausePlayback();scrub.doubleValue=chosenRange()?.0 ?? 0;requestPreview()}
  func pausePlayback(){player?.pause();playbackTimer?.invalidate();playbackTimer=nil;isPlaying=false;playButton.title="";playButton.image=NSImage(systemSymbolName:"play.fill",accessibilityDescription:"Play")}
@@ -651,7 +705,7 @@ final class App:NSObject,NSApplicationDelegate,NSWindowDelegate {
 
    if let renderer=renderer,!frames.isEmpty{image=renderer.layer(CMTimeGetSeconds(request.compositionTime),frames,layout.cells ?? [:],bounds.width,bounds.height).composited(over:image)}
    if let renderer=renderer{image=renderer.customLayer(layout.visuals?.first{$0.kind=="Custom"},target).composited(over:image)}
-   let textValue=telemetryLine(values,widgets)
+   let textValue=layout.displayLine(values,time:CMTimeGetSeconds(request.compositionTime))
    if !textValue.isEmpty && layout.telemetryHidden != true{
     let w=layout.line;let text=cache.image(w,textValue,bounds.height);let pad=max(3,bounds.height/360)
     let x=bounds.minX+lineX(layout,textValue,bounds.width,bounds.height)-pad;let y=bounds.maxY-w.y*bounds.height-text.extent.height+pad

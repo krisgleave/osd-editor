@@ -5,17 +5,25 @@ struct TelemetryVisual:Codable {
  var text:String?;var tint:[Double]?;var kind:String;var hidden:Bool?;var enabled=false;var x:Double;var y:Double;var scale:Double=1
 }
 func defaultVisuals()->[TelemetryVisual]{[TelemetryVisual(kind:"SBat",x:0.05,y:0.72),TelemetryVisual(kind:"Signal",x:0.05,y:0.57),TelemetryVisual(kind:"Bitrate",x:0.72,y:0.72),TelemetryVisual(kind:"GBat",x:0.72,y:0.57),TelemetryVisual(kind:"Distance",x:0.72,y:0.42),TelemetryVisual(text:"MY DRONE",kind:"Custom",x:0.40,y:0.12)]}
+func defaultCameraVisuals()->[TelemetryVisual]{[TelemetryVisual(kind:"CameraSettings",x:0.05,y:0.78),TelemetryVisual(kind:"ElapsedTime",x:0.74,y:0.80)]}
 func reading(_ value:String?)->Double?{guard let value=value else{return nil};return Double(value.prefix{ "0123456789.-".contains($0) })}
 func bandColour(_ value:Double,_ red:Double,_ green:Double)->NSColor{value < red ? .systemRed:(value < green ? .systemOrange:.systemGreen)}
-func visualRect(_ visual:TelemetryVisual,_ canvas:CGRect)->CGRect{if visual.kind=="Custom"{return CGRect(x:canvas.minX+visual.x*canvas.width,y:canvas.minY+visual.y*canvas.height,width:canvas.width*36/1920*visual.scale*Double((visual.text ?? "MY DRONE").count),height:canvas.height*0.05*visual.scale)};let height=canvas.height*0.13*visual.scale;let width=height*2.2;return CGRect(x:canvas.minX+visual.x*canvas.width,y:canvas.minY+visual.y*canvas.height,width:width,height:height)}
+func visualRect(_ visual:TelemetryVisual,_ canvas:CGRect)->CGRect{if visual.kind=="Custom"{return CGRect(x:canvas.minX+visual.x*canvas.width,y:canvas.minY+visual.y*canvas.height,width:canvas.width*36/1920*visual.scale*Double((visual.text ?? "MY DRONE").count),height:canvas.height*0.05*visual.scale)};let height=canvas.height*0.13*visual.scale;let width=height*(visual.kind=="CameraSettings" ? 5.6:2.2);return CGRect(x:canvas.minX+visual.x*canvas.width,y:canvas.minY+visual.y*canvas.height,width:width,height:height)}
 func drawVisuals(_ layout:Layout,_ values:[String:String],_ cues:[Cue],_ time:Double,_ canvas:CGRect,preview:Bool=false){
- for v in layout.visuals ?? defaultVisuals() where v.kind != "Custom" && v.enabled && (preview || v.hidden != true) {
+ for v in layout.visuals ?? defaultVisuals() where v.kind != "Custom" && v.kind != "CameraSettings" && v.kind != "ElapsedTime" && v.enabled && (preview || v.hidden != true) {
   let box=visualRect(v,canvas);let u=box.height/100
   NSGraphicsContext.saveGraphicsState();defer{NSGraphicsContext.restoreGraphicsState()}
   if v.hidden == true{NSGraphicsContext.current?.cgContext.setAlpha(0.25)}
   NSColor.black.withAlphaComponent(0.70).setFill();NSBezierPath(roundedRect:box,xRadius:8*u,yRadius:8*u).fill()
   func text(_ value:String,_ x:Double,_ y:Double,_ size:Double,_ colour:NSColor = .white){(value as NSString).draw(at:CGPoint(x:box.minX+x*u,y:box.minY+y*u),withAttributes:[.font:NSFont.monospacedDigitSystemFont(ofSize:size*u,weight:.semibold),.foregroundColor:colour])}
   switch v.kind {
+  case "CameraSettings":
+   let fields=["ISO","Shutter","EV","CT","Colour Profile"].filter { layout.cameraFieldEnabled($0) }
+   text("CAMERA SETTINGS",12,8,14,.systemTeal)
+   for (i,field) in fields.enumerated(){let x=12+Double(i)*210/Double(max(1,fields.count));text(field.uppercased(),x,32,10,.secondaryLabelColor);text(values[field] ?? "—",x,51,16)}
+  case "ElapsedTime":
+   text("ELAPSED",12,8,14,.systemTeal)
+   let total=max(0,Int(time.rounded(.down)));text(String(format:"%02d:%02d:%02d",total/3600,total/60%60,total%60),12,42,28)
   case "Battery","SBat","GBat":
    let source=v.kind=="GBat" ? "GBat":"SBat",cells=1;let voltage=reading(values[source]);let perCell=voltage.map{$0/Double(cells)};let colour=perCell.map{bandColour($0,layout.batteryRed ?? 3.5,layout.batteryGreen ?? 3.75)} ?? .gray
    text(source,12,8,14)
@@ -47,6 +55,30 @@ func visualsLayer(_ layout:Layout,_ values:[String:String],_ cues:[Cue],_ time:D
  NSGraphicsContext.saveGraphicsState();NSGraphicsContext.current=NSGraphicsContext(cgContext:context.cgContext,flipped:true);context.cgContext.translateBy(x:0,y:size.height);context.cgContext.scaleBy(x:1,y:-1);drawVisuals(layout,values,cues,time,CGRect(origin:.zero,size:size));NSGraphicsContext.restoreGraphicsState();return bitmap.cgImage.map{CIImage(cgImage:$0)}
 }
 extension App {
+ func buildCameraVisualControls()->NSView {
+  let stack=NSStackView();stack.orientation = .vertical;stack.alignment = .leading;stack.spacing = 8;stack.widthAnchor.constraint(equalToConstant:312).isActive = true
+  let note=NSTextField(wrappingLabelWithString:"Choose a card, then drag it in the preview. Camera Settings uses the enabled ISO, Shutter, EV, CT and Colour Profile fields.")
+  note.font = .systemFont(ofSize:11);note.textColor = .secondaryLabelColor;note.maximumNumberOfLines = 0;note.widthAnchor.constraint(equalToConstant:300).isActive = true;stack.addArrangedSubview(note)
+  for title in ["Camera settings","Elapsed recording time"] {
+   let check=NSButton(checkboxWithTitle:title,target:self,action:#selector(cameraVisualToggle(_:)));check.tag = djiVisualChecks.count;check.font = .systemFont(ofSize:12);djiVisualChecks.append(check);stack.addArrangedSubview(check)
+  }
+  return stack
+ }
+ func cameraVisuals() -> [TelemetryVisual] {
+  var visuals=settings.layout.visuals ?? []
+  for visual in defaultCameraVisuals() where !visuals.contains(where:{$0.kind==visual.kind}) { visuals.append(visual) }
+  settings.layout.visuals=visuals
+  return visuals
+ }
+ func refreshCameraVisualControls(){
+  let visuals=settings.layout.visuals ?? []
+  for (index,check) in djiVisualChecks.enumerated(){let kind=index==0 ? "CameraSettings":"ElapsedTime";check.state=visuals.first(where:{$0.kind==kind})?.enabled == true ? .on:.off}
+ }
+ @objc func cameraVisualToggle(_ sender:NSButton){
+  var visuals=cameraVisuals();let kind=sender.tag==0 ? "CameraSettings":"ElapsedTime"
+  if let index=visuals.firstIndex(where:{$0.kind==kind}) {visuals[index].enabled=sender.state == .on}
+  settings.layout.visuals=visuals;save();syncPreview();selectionChanged()
+ }
  func buildVisualControls()->NSView {
   let stack=NSStackView();stack.orientation = .vertical;stack.alignment = .leading;stack.spacing=8;stack.widthAnchor.constraint(equalToConstant:312).isActive=true
   let toggles=NSStackView();toggles.spacing=12
