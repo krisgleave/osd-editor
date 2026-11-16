@@ -11,7 +11,9 @@ Scrub the timeline to see the settings change. Under **Telemetry contents**, cho
 
 Open the stabilised video, click **Import SRT Files**, then Command-click all the original DJI sidecars in the file picker. The files can live in a different folder from the video. The app orders and combines the chapters automatically, then confirms the generated matching SRT filename and folder.
 
-The editor sorts by the first embedded recording date and time when every chapter has one. Otherwise it uses natural filename order. Each chapter starts at the preceding chapters’ combined SRT duration. Local cue gaps are preserved. The dialog shows the video and telemetry durations to help spot missing chapters or a trim. This assumes Gyroflow kept the full chapters at their original speed in recording order. For a trimmed or retimed output, align or retime the exported transparent overlay to match the edit.
+The editor sorts by the first embedded recording date and time when every chapter has one. Otherwise it uses natural filename order. Each chapter starts at the preceding chapters’ combined SRT duration. Local cue gaps are preserved. This assumes Gyroflow exported the full chapters at their original speed in recording order.
+
+Export the complete joined Gyroflow clip before importing the SRT chapters. A trimmed or retimed Gyroflow output has different timing from the original SRT, so the telemetry will not align. Trim the full video and any alpha overlay together afterwards in your editor.
 
 Use **Import SRT Files** after opening the joined Gyroflow video. Selecting one file imports it normally. Selecting several original DJI chapters orders and joins them automatically, then saves one SRT alongside the video with the same base name. That file loads automatically with the video on future edits.
 
@@ -24,3 +26,5 @@ When a DJI SRT is loaded, P1-only visual controls are hidden. The **Elapsed** it
 ## Transparent overlay exports
 
 **Export telemetry alpha only…** appears beside Export video and works with DJI and P1 sources. Its dialog lets you select Telemetry, OSD and Visuals. Choose **One combined file** for a single ProRes 4444 overlay, or **Separate files** to create one transparent movie for each selected layer. Separate files make it easy to enable, disable and arrange layers independently in a video editor.
+
+Alpha-only exports are fast because they render the overlays without rendering the source video. Use **Export video** when you want the selected overlays baked into a new MP4.

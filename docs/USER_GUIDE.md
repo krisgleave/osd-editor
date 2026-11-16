@@ -21,7 +21,12 @@ It edits recordings already copied to your computer. It does not connect to a re
 2. Open the video. A same-name SRT in the same folder loads automatically. **Import SRT Files** imports one sidecar manually. For a Gyroflow video created from several DJI chapters, select every original DJI SRT at once. The editor orders and combines them, saves one matching SRT alongside the opened video, then loads it.
 3. Import a compatible OSD image-font PNG through the Fonts menu if prompted. The app copies imported fonts into its managed library. No third-party OSD font is bundled.
 4. Reposition and style OSD, choose the telemetry fields and optional visuals, and set the export range and format. With DJI, choose camera fields such as ISO, Shutter, EV, CT, Colour Profile, Aperture and Elapsed.
-5. Export a new MP4. Original media remains unchanged.
+5. Choose an export route.
+
+   - **Export video** renders a fresh MP4 with the selected OSD, written telemetry and visual elements baked into the picture.
+   - **Export telemetry alpha only** creates silent transparent ProRes 4444 MOV overlays. Select Telemetry, recorded OSD and Visuals, then choose one combined MOV or a separate MOV for each layer. Alpha-only exports process quickly because the source video does not need to be rendered. In your editor, place each alpha MOV above the original footage and enable it only where you want that overlay to appear.
+
+   Original video and SRT files remain unchanged.
 
 The app reads recorded character codes and grid positions, rather than recognising text from the video picture. OSD grouping uses recording drawing runs, with proximity grouping as a fallback. It does not semantically identify every item as GPS, battery, altitude, etc. Different layouts and recordings may group differently.
 
@@ -54,7 +59,9 @@ The line supports text-font selection and alignment. Text fonts and OSD image fo
 
 DJI camera SRT sidecars contain timestamped camera metadata. The editor detects this format automatically and offers the available fields in Telemetry contents. Colour Profile is DJI’s recording profile, while Elapsed begins at `00:00:00` and advances with the recording timeline. Recording Time is the camera’s time of day and displays as `HH:MM:SS`.
 
-Gyroflow can join several DJI video chapters into one stabilised file. Open that completed video, use **Import SRT Files**, select all original SRT chapters and the app creates a combined matching sidecar in the same folder. The source chapters are left unchanged. If a same-name SRT already exists, rename or move it before combining to protect it from replacement.
+Gyroflow can join several DJI video chapters into one stabilised file. Export the **entire joined clip** from Gyroflow at its original speed, then open that completed video in OSD Editor. Use **Import SRT Files**, select all original SRT chapters and the app creates a combined matching sidecar in the same folder. The source chapters are left unchanged. If a same-name SRT already exists, rename or move it before combining to protect it from replacement.
+
+Do not export only a trimmed portion from Gyroflow when you intend to use the SRT unchanged. The combined SRT starts at the beginning of the flight and its timestamps no longer line up with a clip whose start or speed has changed. Export the full clip first, then trim the video and its alpha overlay together in your editor.
 
 ## Optional telemetry visuals
 

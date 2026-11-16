@@ -39,6 +39,10 @@ Choose the required fields under Telemetry contents. **Elapsed** starts at `00:0
 
 Select **Export telemetry alpha only**. Choose the layers you want and choose one combined file or separate files. Place each exported MOV above the matching footage in your editor. Separate alpha movies make it straightforward to enable, disable, reorder or style OSD, telemetry and visuals independently.
 
+Alpha-only exports process quickly because they create overlays without rendering the source video. Use **Export video** when you want the selected overlays baked into a new MP4 instead.
+
+For a Gyroflow workflow, export the complete joined clip at its original speed before importing its SRT chapters. An SRT starts at the original recording beginning, so it will not align with a Gyroflow file that has been trimmed or retimed. Trim the full video and any alpha overlay together later in the video editor.
+
 ## Compatibility
 
 v1.2 has been checked with BETAFPV P1 / Artlynk recordings and a DJI camera-metadata SRT sample. DJI support is for written camera telemetry. It does not extract or edit DJI graphical OSD from video pixels. Existing limits for unverified recording systems, fonts and operating systems continue to apply.

@@ -55,8 +55,8 @@ Development testing used an **M4 Pro MacBook Pro** with P1 sample recordings. Th
 1. Download **OSD-Editor-1.2.0-Mac.zip** from [Releases](https://github.com/krisgleave/osd-editor/releases/latest). GitHub’s **Code → Download ZIP** contains source, not the app.
 2. Unzip and move **OSD Editor.app** into Applications if desired.
 3. Import a compatible OSD PNG when prompted. **Get OSD fonts…** opens Sneaky FPV’s site without closing the import dialogue. [Font instructions](docs/FONTS.md).
-4. Open a recording. A same-name SRT in the same folder loads automatically. Use **Import SRT Files** to select one sidecar manually, or select several original DJI chapters to combine them into one matching SRT beside the opened video.
-5. Select and arrange overlays, set the range and export format, then export a new MP4.
+4. Open a recording. A same-name SRT in the same folder loads automatically. Use **Import SRT Files** to select one sidecar manually, or select several original DJI chapters to combine them into one matching SRT beside the opened video. For a Gyroflow workflow, export the complete joined clip before importing it. A trimmed or retimed Gyroflow export will not match the original SRT timestamps.
+5. Select and arrange overlays, then either export a new MP4 with them baked in or create transparent alpha-only MOV overlays. Alpha exports can combine Telemetry, recorded OSD and Visuals into one file or keep them separate for flexible editing.
 
 The app is locally/ad-hoc signed, **not Apple Developer ID signed or notarized**. See [installation and troubleshooting](docs/INSTALLATION.md) if macOS blocks it. Do not disable macOS security protections globally.
 
