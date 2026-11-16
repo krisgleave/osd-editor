@@ -1,6 +1,6 @@
 # Changelog
 
-## 1.0.1 — 2026-11-06
+## 1.1 — 2026-11-06
 
 - Made the blue icon background opaque and full-bleed to avoid a second pale tile in the Dock.
 - Retained the approved OSD Editor artwork. Editing and export behaviour are unchanged.
