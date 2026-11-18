@@ -6,7 +6,12 @@ struct TelemetryVisual:Codable {
 }
 func defaultVisuals()->[TelemetryVisual]{[TelemetryVisual(kind:"SBat",x:0.05,y:0.72),TelemetryVisual(kind:"Signal",x:0.05,y:0.57),TelemetryVisual(kind:"Bitrate",x:0.72,y:0.72),TelemetryVisual(kind:"GBat",x:0.72,y:0.57),TelemetryVisual(kind:"Distance",x:0.72,y:0.42),TelemetryVisual(text:"MY DRONE",kind:"Custom",x:0.40,y:0.12)]}
 func defaultCameraVisuals()->[TelemetryVisual]{[TelemetryVisual(kind:"CameraSettings",x:0.05,y:0.78),TelemetryVisual(kind:"ElapsedTime",x:0.74,y:0.80)]}
-func reading(_ value:String?)->Double?{guard let value=value else{return nil};return Double(value.prefix{ "0123456789.-".contains($0) })}
+func reading(_ value:String?)->Double? {
+ guard let value=value else{return nil}
+ let normalized=value.trimmingCharacters(in:.whitespacesAndNewlines).replacingOccurrences(of:",",with:".")
+ guard let number=Double(normalized.prefix{"0123456789.+-".contains($0)}),number.isFinite else{return nil}
+ return number
+}
 func bandColour(_ value:Double,_ red:Double,_ green:Double)->NSColor{value < red ? .systemRed:(value < green ? .systemOrange:.systemGreen)}
 func visualRect(_ visual:TelemetryVisual,_ canvas:CGRect)->CGRect{if visual.kind=="Custom"{return CGRect(x:canvas.minX+visual.x*canvas.width,y:canvas.minY+visual.y*canvas.height,width:canvas.width*36/1920*visual.scale*Double((visual.text ?? "MY DRONE").count),height:canvas.height*0.05*visual.scale)};let height=canvas.height*0.13*visual.scale;let width=height*(visual.kind=="CameraSettings" ? 5.6:2.2);return CGRect(x:canvas.minX+visual.x*canvas.width,y:canvas.minY+visual.y*canvas.height,width:width,height:height)}
 func drawVisuals(_ layout:Layout,_ values:[String:String],_ cues:[Cue],_ time:Double,_ canvas:CGRect,preview:Bool=false){

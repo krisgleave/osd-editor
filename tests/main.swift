@@ -84,6 +84,22 @@ if CommandLine.arguments.contains("--camera-test") {
  let a=AVURLAsset(url:URL(fileURLWithPath:CommandLine.arguments[2]));let t=a.tracks(withMediaType:.video).first!;print(t.naturalSize,t.nominalFrameRate,CMTimeGetSeconds(a.duration))
 } else if CommandLine.arguments.contains("--batch-test") || CommandLine.arguments.contains("--batch-cancel-test") {
  let a=NSApplication.shared;let app=App();a.delegate=app;app.applicationDidFinishLaunching(Notification(name:NSApplication.didFinishLaunchingNotification));app.osdRenderer=try OSDRenderer(URL(fileURLWithPath:CommandLine.arguments[5]));app.batchSources=[URL(fileURLWithPath:CommandLine.arguments[2]),URL(fileURLWithPath:CommandLine.arguments[3])];app.startBatch(to:URL(fileURLWithPath:CommandLine.arguments[4]));if CommandLine.arguments.contains("--batch-cancel-test"){Timer.scheduledTimer(withTimeInterval:0.02,repeats:false){_ in app.cancelExport()}};a.run()
+} else if CommandLine.arguments.contains("--telemetry-regression-test") {
+ for voltage in [4.20,3.75,3.50,3.44,3.43,3.20,3.00,2.90] {
+  let value=String(format:"%.2fV",voltage)
+  precondition(reading(value)==voltage)
+  precondition(reading(value.replacingOccurrences(of:".",with:","))==voltage)
+ }
+ precondition(reading(" 3.41 V")==3.41)
+ precondition(reading(nil)==nil)
+ precondition(reading("N/A")==nil)
+ let input="1\n00:00:00,000 --> 00:00:01,000\nSBat: GBat: 3.42 Signal: 4"
+ let samples=parseSRT(input)
+ precondition(samples.count==1)
+ precondition(samples[0].values["SBat"]==nil)
+ precondition(samples[0].values["GBat"]=="3.42")
+ precondition(samples[0].values["Signal"]=="4")
+ print("PASS: Low voltage, decimal commas and missing telemetry fields")
 } else if CommandLine.arguments.contains("--self-test") {
  let text="0\n00:00:00,000 --> 00:00:00,500\nSignal:4 CH: 1 SBat: 4.13 Bitrate:21Mbps\n\n1\n00:00:00,500 --> 00:00:01,000\nSignal:3 CH: 2 SBat: 4.01 Bitrate:18Mbps\n"
  let cues=parseSRT(text);precondition(cues.count==2);precondition(valuesAt(0.25,cues)["CH"]=="1");precondition(valuesAt(0.75,cues)["SBat"]=="4.01");precondition(valuesAt(2,cues).isEmpty)

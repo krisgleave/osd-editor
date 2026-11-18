@@ -15,7 +15,7 @@ func seconds(_ t:String)->Double {
 }
 func parseSRT(_ text:String)->[Cue] {
  let normalized=text.replacingOccurrences(of:"\r\n",with:"\n").replacingOccurrences(of:"\r",with:"\n")
- let expression=try! NSRegularExpression(pattern:#"\b([A-Za-z][A-Za-z0-9]*):\s*([^\s]+)"#)
+ let expression=try! NSRegularExpression(pattern:#"\b([A-Za-z][A-Za-z0-9]*):[ \t]*(?![A-Za-z][A-Za-z0-9]*:)([^\s]+)"#)
  return normalized.components(separatedBy:"\n\n").compactMap { block in
   let lines=block.components(separatedBy:.newlines)
   guard let timeIndex=lines.firstIndex(where:{$0.contains("-->")}) else{return nil}
