@@ -42,6 +42,17 @@ struct AdditionalTelemetry {
  var cues:[Cue]
  var enabled=true
  var offset:Double=0
+ var style=Layout()
+ func sample(_ time:Double)->[String:String] {
+  guard enabled,time>=offset else{return [:]}
+  let t=time-offset
+  var low=0,high=cues.count
+  while low<high {let mid=(low+high)/2;if cues[mid].start<=t{low=mid+1}else{high=mid}}
+  guard low>0,t<cues[low-1].end else{return [:]}
+  return cues[low-1].values
+ }
+ func text(_ time:Double)->String{let values=sample(time);return values.isEmpty ? "":style.displayLine(values,time:max(0,time-offset))}
+ var camera:Bool{isCamera(cues.first?.values ?? [:])}
 }
 
 func mergeTelemetry(_ primary:[Cue],_ additional:[AdditionalTelemetry])->[Cue] {
@@ -133,11 +144,13 @@ final class FlippedView:NSView {override var isFlipped:Bool{true}}
 final class Preview:NSView {
  var selectedVisuals=Set<Int>();var visualDragStarts=[Int:CGPoint]();var visualDragBounds=CGRect.zero;var visualDragOrigin=CGPoint.zero;var allVisualsSelected=false;var selectedVisual:Int?;var visualCues=[Cue]();var visualTime=0.0;var draggingVisual:Int?;var onVisualMove:((Int,Double,Double)->Void)?
 
+ var extraTracks=[AdditionalTelemetry]();var extraIndex:Int?;var extraDrag:Int?
  var telemetrySelected=false;var draggingTelemetry=false;var onTargetSelect:((Bool)->Void)?
  var layout=Layout();var osdImage:NSImage?;var mode=0;var selectionStart:NSPoint?;var selectionEnd:NSPoint?
  var selectedCells=Set<Int>();var availableCells=Set<Int>();var visibleCells=Set<Int>()
  var elementGroups=[Set<Int>]()
  var outlines:[Set<Int>]{let groups=elementGroups.isEmpty ? detectedGroups(availableCells.isEmpty ? visibleCells:availableCells,[:],includeHidden:true):elementGroups;return groups.filter{!$0.isDisjoint(with:visibleCells)}}
+ func extraRect(_ track:AdditionalTelemetry)->NSRect{let r=videoRect;let t=track.text(visualTime);let s=(t as NSString).size(withAttributes:textAttributes(track.style.line,r.height));return NSRect(x:r.minX+lineX(track.style,t,r.width,r.height),y:r.minY+track.style.line.y*r.height,width:s.width,height:s.height)}
  func lineRect()->NSRect{let r=videoRect;let text=layout.displayLine(values,time:visualTime);let size=(text as NSString).size(withAttributes:textAttributes(layout.line,r.height));return NSRect(x:r.minX+lineX(layout,text,r.width,r.height),y:r.minY+layout.line.y*r.height,width:size.width,height:size.height)}
  func displayBox(_ ids:Set<Int>)->NSRect{let b=cellBounds(ids,layout.cells ?? [:]);let r=videoRect;return NSRect(x:r.minX+b.minX*r.width,y:r.minY+b.minY*r.height,width:b.width*r.width,height:b.height*r.height)}
  var onEditBegin:(()->Void)?;var editStarted=false
@@ -175,7 +188,15 @@ final class Preview:NSView {
   if layout.telemetryHidden == true{NSGraphicsContext.current?.cgContext.setAlpha(0.25)}
   line.draw(at:NSPoint(x:r.minX+lineX(layout,line as String,r.width,r.height),y:r.minY+layout.line.y*r.height),withAttributes:textAttributes(layout.line,r.height))
   NSGraphicsContext.current?.cgContext.setAlpha(1)
-  if telemetrySelected {NSColor.systemCyan.setStroke();NSBezierPath(rect:NSRect(x:r.minX+lineX(layout,line as String,r.width,r.height),y:r.minY+layout.line.y*r.height,width:line.size(withAttributes:textAttributes(layout.line,r.height)).width,height:line.size(withAttributes:textAttributes(layout.line,r.height)).height).insetBy(dx:-3,dy:-3)).stroke()}
+  if telemetrySelected && extraIndex==nil {NSColor.systemCyan.setStroke();NSBezierPath(rect:NSRect(x:r.minX+lineX(layout,line as String,r.width,r.height),y:r.minY+layout.line.y*r.height,width:line.size(withAttributes:textAttributes(layout.line,r.height)).width,height:line.size(withAttributes:textAttributes(layout.line,r.height)).height).insetBy(dx:-3,dy:-3)).stroke()}
+  for (i,track) in extraTracks.enumerated() where track.enabled {
+   let text=track.text(visualTime);guard !text.isEmpty else{continue}
+   let box=extraRect(track);let attrs=textAttributes(track.style.line,r.height)
+   NSGraphicsContext.current?.cgContext.setAlpha(track.style.telemetryHidden == true ? 0.25:1)
+   (text as NSString).draw(at:box.origin,withAttributes:attrs)
+   NSGraphicsContext.current?.cgContext.setAlpha(1)
+   if telemetrySelected && extraIndex==i{NSColor.systemCyan.setStroke();NSBezierPath(rect:box.insetBy(dx:-3,dy:-3)).stroke()}
+  }
   drawVisuals(layout,values,visualCues,visualTime,r,preview:true)
   for i in (layout.visuals ?? []).indices where (allVisualsSelected || selectedVisual==i || selectedVisuals.contains(i)) && layout.visuals![i].enabled{let visuals=layout.visuals!;let box=visualRect(visuals[i],r);NSColor.systemBlue.withAlphaComponent(0.18).setFill();NSBezierPath(rect:box).fill();NSColor.systemCyan.setStroke();let path=NSBezierPath(rect:box);path.lineWidth=2.5;path.stroke()}
   if layout.centreGuides == true{
@@ -187,7 +208,7 @@ final class Preview:NSView {
  }
  override func mouseDown(with event:NSEvent) {
   let p=convert(event.locationInWindow,from:nil);guard videoRect.contains(p) else{return};dragging=false;movedDuringGesture=false;editStarted=false;draggingTelemetry=false
-  draggingVisual=nil
+  draggingVisual=nil;extraDrag=nil;extraIndex=nil
   let visuals=layout.visuals ?? defaultVisuals()
   let existing=Set(visuals.indices.filter{visuals[$0].enabled && (allVisualsSelected || selectedVisual==$0 || selectedVisuals.contains($0))})
   if let i=visuals.indices.reversed().first(where:{visuals[$0].enabled && visualRect(visuals[$0],videoRect).contains(p)}){
@@ -196,6 +217,9 @@ final class Preview:NSView {
    onTargetSelect?(false);needsDisplay=true;draggingVisual=i;dragging=true;dragOffset=p;return
   }
   selectedVisual=nil;selectedVisuals=[];allVisualsSelected=false
+  if let i=extraTracks.indices.reversed().first(where:{extraTracks[$0].enabled && !extraTracks[$0].text(visualTime).isEmpty && extraRect(extraTracks[$0]).insetBy(dx:-4,dy:-3).contains(p)}){
+   extraIndex=i;extraDrag=i;telemetrySelected=true;selectedCells=[];let box=extraRect(extraTracks[i]);dragOffset=NSPoint(x:p.x-box.minX,y:p.y-box.minY);dragging=true;draggingTelemetry=true;onTargetSelect?(true);return
+  }
   if !layout.displayLine(values,time:visualTime).isEmpty && lineRect().insetBy(dx:-4,dy:-3).contains(p){telemetrySelected=true;selectedCells=[];onTargetSelect?(true);draggingTelemetry=true;dragging=true;dragOffset=NSPoint(x:p.x-videoRect.minX-lineX(layout,layout.displayLine(values,time:visualTime),videoRect.width,videoRect.height),y:p.y-videoRect.minY-layout.line.y*videoRect.height);return}
   telemetrySelected=false;onTargetSelect?(false)
   if !selectedCells.isEmpty && selectedCells.contains(where:{displayBox([$0]).contains(p)}){beginOSDDrag(p);return}
@@ -236,7 +260,7 @@ final class Preview:NSView {
    for (i,start) in visualDragStarts{onVisualMove?(i,start.x+dx,start.y+dy)};needsDisplay=true;return
   }
 
-  if draggingTelemetry{var point=CGPoint(x:max(0,min(0.98,(p.x-dragOffset.x-r.minX)/r.width)),y:max(0,min(0.98,(p.y-dragOffset.y-r.minY)/r.height)));if layout.gridEnabled == true{point=snappedOrigin(point,layout.gridColumns ?? 32,canvasSize.width/canvasSize.height)};let x=point.x,y=point.y;layout.line.x=x;layout.line.y=y;onMove?(0,x,y)}
+  if draggingTelemetry{var point=CGPoint(x:max(0,min(0.98,(p.x-dragOffset.x-r.minX)/r.width)),y:max(0,min(0.98,(p.y-dragOffset.y-r.minY)/r.height)));if layout.gridEnabled == true{point=snappedOrigin(point,layout.gridColumns ?? 32,canvasSize.width/canvasSize.height)};let x=point.x,y=point.y;if extraDrag==nil{layout.line.x=x;layout.line.y=y};onMove?(0,x,y)}
   else if !selectedCells.isEmpty{
    var target=CGPoint(x:dragStartBounds.minX+(p.x-dragOrigin.x)/r.width,y:dragStartBounds.minY+(p.y-dragOrigin.y)/r.height)
    if layout.gridEnabled == true{target=snappedOrigin(target,layout.gridColumns ?? 32,canvasSize.width/canvasSize.height)}
@@ -285,10 +309,16 @@ final class App:NSObject,NSApplicationDelegate,NSWindowDelegate {
  var p1VisualSection:NSView?;var djiVisualSection:NSView?;var djiVisualChecks=[NSButton]()
  let newSessionButton=NSButton(title:"New session",target:nil,action:nil)
  var cameraSource=false
+ var selectedExtra:Int?{guard preview.telemetrySelected,let i=preview.extraIndex,additionalTelemetry.indices.contains(i) else{return nil};return i}
+ var telemetryStyle:Layout {
+  get{if let i=selectedExtra{return additionalTelemetry[i].style};return settings.layout}
+  set{if let i=selectedExtra{additionalTelemetry[i].style=newValue}else{settings.layout=newValue}}
+ }
  var primaryCues=[Cue]()
  var additionalTelemetry=[AdditionalTelemetry]()
  let addTelemetryButton=NSButton(title:"Add telemetry",target:nil,action:nil)
  let manageTelemetryButton=NSButton(title:"Sources",target:nil,action:nil)
+ let removeTelemetryButton=NSButton(title:"Remove selected",target:nil,action:nil)
  var writingCamera=false;var alphaExporting=false
  let cameraExport=NSButton(title:"Export telemetry alpha only",target:nil,action:nil)
  let open=NSButton(title:"Open video",target:nil,action:nil);let match=NSButton(title:"Import SRT Files",target:nil,action:nil);let export=NSButton(title:"Export video",target:nil,action:nil);let cancel=NSButton(title:"Cancel export",target:nil,action:nil)
@@ -344,6 +374,8 @@ final class App:NSObject,NSApplicationDelegate,NSWindowDelegate {
   manageTelemetryButton.action=#selector(manageTelemetrySources)
   telemetryRow.addArrangedSubview(addTelemetryButton)
   telemetryRow.addArrangedSubview(manageTelemetryButton)
+  removeTelemetryButton.target=self;removeTelemetryButton.action=#selector(removeSelectedTelemetry)
+  telemetryRow.addArrangedSubview(removeTelemetryButton)
   files.addArrangedSubview(telemetryRow)
   toolbar.insertArrangedSubview(toolPanel(files),at:0)
   left.addArrangedSubview(preview);preview.widthAnchor.constraint(equalTo:left.widthAnchor).isActive=true
@@ -426,7 +458,7 @@ final class App:NSObject,NSApplicationDelegate,NSWindowDelegate {
 
 
   preview.onTargetSelect = {[weak self] _ in self?.selectionChanged()}
-  preview.onMove = {[weak self] _,x,y in guard let self=self else{return};self.settings.layout.centred=false;self.settings.layout.lineAlignment="Custom";self.settings.layout.line.x=x;self.settings.layout.line.y=y;self.preview.layout=self.settings.layout;self.save();self.updateInspector()}
+  preview.onMove = {[weak self] _,x,y in guard let self=self else{return};self.telemetryStyle.centred=false;self.telemetryStyle.lineAlignment="Custom";self.telemetryStyle.line.x=x;self.telemetryStyle.line.y=y;self.save();self.syncPreview();self.updateInspector()}
   preview.onVisualMove = {[weak self] i,x,y in guard let self=self else{return};var v=self.settings.layout.visuals ?? defaultVisuals();v[i].x=x;v[i].y=y;self.settings.layout.visuals=v;self.save();self.syncPreview()}
   preview.onEditBegin = {[weak self] in self?.rememberMove()}
   preview.onSelection = {[weak self] _ in self?.selectionChanged()}
@@ -472,7 +504,7 @@ final class App:NSObject,NSApplicationDelegate,NSWindowDelegate {
  func save(){do{try JSONEncoder().encode(settings).write(to:settingsURL,options:.atomic);updatePresetSaveState()}catch{status.stringValue="Couldn’t save settings: \(error.localizedDescription)"}}
  func applyTheme(){switch settings.layout.theme {case "Dark":window.appearance=NSAppearance(named:.darkAqua);case "Light":window.appearance=NSAppearance(named:.aqua);default:window.appearance=nil}}
  func refreshUI(){refreshVisualControls();syncPreview();refreshCameraControls();theme.selectItem(withTitle:settings.layout.theme);codec.selectItem(withTitle:settings.layout.codec);outputSize.selectItem(withTitle:settings.layout.outputSize ?? "Original");applyTheme();updateInspector();refreshPresets();refreshFontMenus();selectionChanged();updateEnabled()}
- func updateEnabled(){let idle=session==nil && !batchRunning && !alphaExporting;let trim=idle && batchSources.count<2;bar.isHidden=idle;timelineView.isHidden=asset==nil && !cameraSource;playButton.isEnabled=asset != nil && idle;pauseButton.isEnabled=asset != nil && idle;stopButton.isEnabled=asset != nil && idle;exportPercent.isHidden=idle;startField.isEnabled=asset != nil && trim;endField.isEnabled=asset != nil && trim;trimButtons.forEach{$0.isEnabled=asset != nil && trim};timelineView.trimmingEnabled=trim && asset != nil;batchOpen.isEnabled=idle;batchPicker.isEnabled=idle;outputSize.isEnabled=idle;aspectPopup.isEnabled=idle && asset != nil && !loadingOSD;codec.isEnabled=idle;export.title=batchSources.count>1 ? "Export all \(batchSources.count) videos":"Export video";open.isEnabled=idle;newSessionButton.isEnabled=idle && !writingCamera;match.isEnabled=idle && batchSources.count<2;addTelemetryButton.isEnabled=idle && asset != nil && batchSources.count<2;manageTelemetryButton.isEnabled=idle && !additionalTelemetry.isEmpty && batchSources.count<2;export.isEnabled=idle && !loadingOSD && asset != nil && (batchSources.count>1 || !cues.isEmpty || (!osdFrames.isEmpty && osdRenderer != nil));cancel.isHidden=idle}
+ func updateEnabled(){let idle=session==nil && !batchRunning && !alphaExporting;let trim=idle && batchSources.count<2;bar.isHidden=idle;timelineView.isHidden=asset==nil && !cameraSource;playButton.isEnabled=asset != nil && idle;pauseButton.isEnabled=asset != nil && idle;stopButton.isEnabled=asset != nil && idle;exportPercent.isHidden=idle;startField.isEnabled=asset != nil && trim;endField.isEnabled=asset != nil && trim;trimButtons.forEach{$0.isEnabled=asset != nil && trim};timelineView.trimmingEnabled=trim && asset != nil;batchOpen.isEnabled=idle;batchPicker.isEnabled=idle;outputSize.isEnabled=idle;aspectPopup.isEnabled=idle && asset != nil && !loadingOSD;codec.isEnabled=idle;export.title=batchSources.count>1 ? "Export all \(batchSources.count) videos":"Export video";open.isEnabled=idle;newSessionButton.isEnabled=idle && !writingCamera;match.isEnabled=idle && batchSources.count<2;addTelemetryButton.isEnabled=idle && asset != nil && batchSources.count<2;manageTelemetryButton.isEnabled=idle && (!cues.isEmpty || !additionalTelemetry.isEmpty) && batchSources.count<2;removeTelemetryButton.isEnabled=idle && preview.telemetrySelected && (selectedExtra != nil || !cues.isEmpty) && batchSources.count<2;export.isEnabled=idle && !loadingOSD && asset != nil && (batchSources.count>1 || !cues.isEmpty || additionalTelemetry.contains{$0.enabled} || (!osdFrames.isEmpty && osdRenderer != nil));cancel.isHidden=idle}
  func layoutData(_ layout:Layout)->Data{var normalized=layout;normalized.presetTitle=nil;normalized.referenceAspect=presetAspect(layout);let e=JSONEncoder();e.outputFormatting = .sortedKeys;return (try? e.encode(normalized)) ?? Data()}
  func defaultLayout()->Layout{var l=Layout();l.osdFontID=settings.legacyOSDFontID ?? fonts("osd").first?.id;migrateLayout(&l);return l}
  func presetDefinition(_ name:String)->Layout?{name=="Default" ? defaultLayout():settings.presets[name]}
@@ -525,57 +557,62 @@ final class App:NSObject,NSApplicationDelegate,NSWindowDelegate {
  }
 
 
- func syncPreview(){refreshCameraControls();p1VisualSection?.isHidden=cameraSource;djiVisualSection?.isHidden=true;if let columns=settings.layout.gridColumns,[16,24].contains(columns){settings.layout.gridColumns=32};if !cameraSource {if var visuals=settings.layout.visuals,visuals.count==3{if visuals[0].kind=="Battery"{visuals[0].kind="SBat";if settings.layout.batterySource=="GBat"{visuals[0].enabled=false;var ground=defaultVisuals()[3];ground.enabled=true;visuals.append(ground)}else{visuals.append(defaultVisuals()[3])}}else{visuals.append(defaultVisuals()[3])};settings.layout.visuals=visuals};if var visuals=settings.layout.visuals,visuals.count==4{visuals.append(defaultVisuals()[4]);settings.layout.visuals=visuals};if var visuals=settings.layout.visuals,visuals.count==5{visuals.append(defaultVisuals()[5]);settings.layout.visuals=visuals}};preview.visualCues=cues;preview.visualTime=scrub.doubleValue;preview.layout=settings.layout;refreshAspectPopup();preview.visibleCells=Set(osdAt(scrub.doubleValue,osdFrames).filter{osdRenderer?.glyphs.indices.contains($0.index) == true}.map{$0.y*53+$0.x});if let renderer=osdRenderer{preview.osdImage=renderer.preview(scrub.doubleValue,osdFrames,settings.layout.cells ?? [:],preview.canvasSize,custom:settings.layout.visuals?.first{$0.kind=="Custom"})}else{preview.osdImage=nil};preview.needsDisplay=true}
+ func syncPreview(){preview.extraTracks=additionalTelemetry;refreshCameraControls();p1VisualSection?.isHidden=cameraSource;djiVisualSection?.isHidden=true;if let columns=settings.layout.gridColumns,[16,24].contains(columns){settings.layout.gridColumns=32};if !cameraSource {if var visuals=settings.layout.visuals,visuals.count==3{if visuals[0].kind=="Battery"{visuals[0].kind="SBat";if settings.layout.batterySource=="GBat"{visuals[0].enabled=false;var ground=defaultVisuals()[3];ground.enabled=true;visuals.append(ground)}else{visuals.append(defaultVisuals()[3])}}else{visuals.append(defaultVisuals()[3])};settings.layout.visuals=visuals};if var visuals=settings.layout.visuals,visuals.count==4{visuals.append(defaultVisuals()[4]);settings.layout.visuals=visuals};if var visuals=settings.layout.visuals,visuals.count==5{visuals.append(defaultVisuals()[5]);settings.layout.visuals=visuals}};preview.visualCues=cues;preview.visualTime=scrub.doubleValue;preview.layout=settings.layout;refreshAspectPopup();preview.visibleCells=Set(osdAt(scrub.doubleValue,osdFrames).filter{osdRenderer?.glyphs.indices.contains($0.index) == true}.map{$0.y*53+$0.x});if let renderer=osdRenderer{preview.osdImage=renderer.preview(scrub.doubleValue,osdFrames,settings.layout.cells ?? [:],preview.canvasSize,custom:settings.layout.visuals?.first{$0.kind=="Custom"})}else{preview.osdImage=nil};preview.needsDisplay=true}
  @objc func outlinesChanged(){settings.layout.centreGuides=showOutlines.state == .on;showOutlines.contentTintColor=showOutlines.state == .on ? .systemBlue:nil;save();syncPreview()}
  func selectionChanged(){
+  if !preview.telemetrySelected || selectedExtra==nil {preview.extraIndex=nil}
+  selectionChooser.segmentCount=4+additionalTelemetry.count
+  for i in 0..<selectionChooser.segmentCount {let title=i==0 ? "None":(i==1 ? "OSD":(i==2+additionalTelemetry.count+1 ? "VIS":(additionalTelemetry.isEmpty ? "TELEM":"T\(i-1)")));selectionChooser.setLabel(title,forSegment:i);selectionChooser.setWidth(additionalTelemetry.isEmpty ? 60:44,forSegment:i)}
+  for i in additionalTelemetry.indices{selectionChooser.setEnabled(true,forSegment:i+3);selectionChooser.setToolTip(additionalTelemetry[i].url.lastPathComponent,forSegment:i+3)}
   selectionChooser.selectedSegment=preview.telemetrySelected ? 2:(preview.selectedCells.isEmpty ? 0:(preview.selectedCells==preview.availableCells ? 1:-1));selectionChooser.setEnabled(!preview.availableCells.isEmpty,forSegment:1);selectionChooser.setEnabled(!cues.isEmpty,forSegment:2)
   showOutlines.state=settings.layout.centreGuides == true ? .on:.off;showOutlines.contentTintColor=settings.layout.centreGuides == true ? .systemBlue:nil
-  let sizes=preview.selectedCells.map{(settings.layout.cells?[String($0)]?.scale ?? 1)*20};let actual=preview.telemetrySelected ? settings.layout.line.size:(sizes.first ?? 20);let mixed = !preview.telemetrySelected && sizes.contains{abs($0-actual)>0.01};lastOSDScale=actual;osdScale.doubleValue=actual;sizeValue.stringValue=mixed ? "":String(Int(actual.rounded()));sizeValue.placeholderString=mixed ? "Mixed":"20";sizeValue.isEnabled=preview.telemetrySelected || !preview.selectedCells.isEmpty;osdScale.isEnabled = !preview.selectedCells.isEmpty;osdColour.isEnabled = !preview.selectedCells.isEmpty
-  alignment.selectedSegment=preview.telemetrySelected ? (["Left","Centre","Right"].firstIndex(of:effectiveAlignment(settings.layout)) ?? -1):-1;verticalAlign.selectedSegment = -1;gridToggle.state=settings.layout.gridEnabled == true ? .on:.off;gridToggle.contentTintColor=settings.layout.gridEnabled == true ? .systemBlue:nil;gridSize.selectItem(withTitle:String([16,24].contains(settings.layout.gridColumns ?? 32) ? 32:(settings.layout.gridColumns ?? 32)))
-  telemetryBaseSize=settings.layout.line.size;let active = preview.telemetrySelected || !preview.selectedCells.isEmpty;osdScale.isEnabled=active;osdColour.isEnabled=active
+  let sizes=preview.selectedCells.map{(settings.layout.cells?[String($0)]?.scale ?? 1)*20};let actual=preview.telemetrySelected ? telemetryStyle.line.size:(sizes.first ?? 20);let mixed = !preview.telemetrySelected && sizes.contains{abs($0-actual)>0.01};lastOSDScale=actual;osdScale.doubleValue=actual;sizeValue.stringValue=mixed ? "":String(Int(actual.rounded()));sizeValue.placeholderString=mixed ? "Mixed":"20";sizeValue.isEnabled=preview.telemetrySelected || !preview.selectedCells.isEmpty;osdScale.isEnabled = !preview.selectedCells.isEmpty;osdColour.isEnabled = !preview.selectedCells.isEmpty
+  alignment.selectedSegment=preview.telemetrySelected ? (["Left","Centre","Right"].firstIndex(of:effectiveAlignment(telemetryStyle)) ?? -1):-1;verticalAlign.selectedSegment = -1;gridToggle.state=settings.layout.gridEnabled == true ? .on:.off;gridToggle.contentTintColor=settings.layout.gridEnabled == true ? .systemBlue:nil;gridSize.selectItem(withTitle:String([16,24].contains(settings.layout.gridColumns ?? 32) ? 32:(settings.layout.gridColumns ?? 32)))
+  telemetryBaseSize=telemetryStyle.line.size;let active = preview.telemetrySelected || !preview.selectedCells.isEmpty;osdScale.isEnabled=active;osdColour.isEnabled=active
   selectionLabel.stringValue=preview.telemetrySelected ? "Telemetry":(preview.selectedCells.isEmpty ? "None":"OSD")
-  let allHidden = preview.telemetrySelected ? settings.layout.telemetryHidden == true:(!preview.selectedCells.isEmpty && preview.selectedCells.allSatisfy{settings.layout.cells?[String($0)]?.hidden == true})
+  let allHidden = preview.telemetrySelected ? telemetryStyle.telemetryHidden == true:(!preview.selectedCells.isEmpty && preview.selectedCells.allSatisfy{settings.layout.cells?[String($0)]?.hidden == true})
   hideSelectionButton.title="";hideSelectionButton.image=visibilityIcon(hidden:allHidden);hideSelectionButton.toolTip=allHidden ? "Show selection":"Hide selection";hideSelectionButton.setAccessibilityLabel(hideSelectionButton.toolTip);hideSelectionButton.contentTintColor=allHidden ? .systemRed:nil;hideSelectionButton.isEnabled = preview.telemetrySelected || !preview.selectedCells.isEmpty
   updateOSDColourControls()
-  selectionChooser.setEnabled((settings.layout.visuals ?? []).contains{$0.enabled},forSegment:3)
-  if let i=chosenVisuals.first,let visuals=settings.layout.visuals{let v=visuals[i];selectionChooser.selectedSegment=preview.allVisualsSelected ? 3:-1;selectionLabel.stringValue=preview.allVisualsSelected ? "Visuals":v.kind;sizeValue.isEnabled=true;osdScale.isEnabled=true;let mixed=chosenVisuals.contains{abs(visuals[$0].scale-v.scale)>0.001};sizeValue.stringValue=mixed ? "":String(Int((v.scale*20).rounded()));sizeValue.placeholderString="Mixed";osdScale.doubleValue=v.scale*20;osdColour.isEnabled=chosenVisuals.count==1 && v.kind=="Custom";resetTint.isEnabled=osdColour.isEnabled && v.tint != nil;if osdColour.isEnabled{let rgb=v.tint ?? [1,1,1];osdColour.color=NSColor(srgbRed:rgb[0],green:rgb[1],blue:rgb[2],alpha:1)};osdColour.toolTip="Visual colours follow their telemetry thresholds";let hidden=chosenVisuals.allSatisfy{visuals[$0].hidden == true};hideSelectionButton.isEnabled=true;hideSelectionButton.image=visibilityIcon(hidden:hidden);hideSelectionButton.toolTip=hidden ? "Show visuals":"Hide visuals"}
+  selectionChooser.setEnabled((settings.layout.visuals ?? []).contains{$0.enabled},forSegment:3+additionalTelemetry.count)
+  if let i=chosenVisuals.first,let visuals=settings.layout.visuals{let v=visuals[i];selectionChooser.selectedSegment=preview.allVisualsSelected ? 3+additionalTelemetry.count:-1;selectionLabel.stringValue=preview.allVisualsSelected ? "Visuals":v.kind;sizeValue.isEnabled=true;osdScale.isEnabled=true;let mixed=chosenVisuals.contains{abs(visuals[$0].scale-v.scale)>0.001};sizeValue.stringValue=mixed ? "":String(Int((v.scale*20).rounded()));sizeValue.placeholderString="Mixed";osdScale.doubleValue=v.scale*20;osdColour.isEnabled=chosenVisuals.count==1 && v.kind=="Custom";resetTint.isEnabled=osdColour.isEnabled && v.tint != nil;if osdColour.isEnabled{let rgb=v.tint ?? [1,1,1];osdColour.color=NSColor(srgbRed:rgb[0],green:rgb[1],blue:rgb[2],alpha:1)};osdColour.toolTip="Visual colours follow their telemetry thresholds";let hidden=chosenVisuals.allSatisfy{visuals[$0].hidden == true};hideSelectionButton.isEnabled=true;hideSelectionButton.image=visibilityIcon(hidden:hidden);hideSelectionButton.toolTip=hidden ? "Show visuals":"Hide visuals"}
 
-  updateStatusSummary();preview.needsDisplay=true
+  if let i=selectedExtra{selectionChooser.selectedSegment=i+3;selectionLabel.stringValue=additionalTelemetry[i].url.lastPathComponent}
+  refreshCameraControls();refreshFontMenus();updateInspector();updateStatusSummary();updateEnabled();preview.needsDisplay=true
  }
- @objc func selectionChoiceChanged(){switch selectionChooser.selectedSegment{case 1:selectAllOSD();case 2:selectTelemetry();case 3:selectAllVisuals();default:clearOSDSelection()}}
+ @objc func selectionChoiceChanged(){let i=selectionChooser.selectedSegment;preview.extraIndex=nil;if i==1{selectAllOSD()}else if i==2{selectTelemetry()}else if i==3+additionalTelemetry.count{selectAllVisuals()}else if additionalTelemetry.indices.contains(i-3){preview.extraIndex=i-3;selectTelemetry()}else{clearOSDSelection()}}
  var chosenVisuals:[Int]{let visuals=settings.layout.visuals ?? [];return visuals.indices.filter{visuals[$0].enabled && (preview.allVisualsSelected || preview.selectedVisual==$0 || preview.selectedVisuals.contains($0))}}
  @objc func selectAllVisuals(){preview.selectedVisuals=[];preview.allVisualsSelected=true;preview.selectedVisual=nil;preview.selectedCells=[];preview.telemetrySelected=false;selectionChanged()}
  @objc func selectTelemetry(){preview.selectedVisuals=[];preview.allVisualsSelected=false;preview.selectedVisual=nil;preview.selectedCells=[];preview.telemetrySelected=true;selectionChanged()}
  @objc func selectAllOSD(){preview.selectedVisuals=[];preview.allVisualsSelected=false;preview.selectedVisual=nil;preview.telemetrySelected=false;preview.mode=0;preview.selectedCells=preview.availableCells;selectionChanged()}
- @objc func clearOSDSelection(){preview.selectedVisuals=[];preview.allVisualsSelected=false;preview.selectedVisual=nil;preview.telemetrySelected=false;preview.selectedCells=[];selectionChanged()}
+ @objc func clearOSDSelection(){preview.selectedVisuals=[];preview.allVisualsSelected=false;preview.selectedVisual=nil;preview.telemetrySelected=false;preview.extraIndex=nil;preview.selectedCells=[];selectionChanged()}
  @objc func sizeEntered(){guard let value=Double(sizeValue.stringValue),value>=4,value<=50 else{selectionChanged();return};osdScale.doubleValue=value;scaleOSD()}
  @objc func scaleOSD(){clearMoveUndo();let target=osdScale.doubleValue.rounded();osdScale.doubleValue=target;sizeValue.stringValue=String(Int(target))
   if !chosenVisuals.isEmpty{var visuals=settings.layout.visuals ?? defaultVisuals();let canvas=CGRect(origin:.zero,size:preview.canvasSize);for i in chosenVisuals{visuals[i].scale=target/20;let box=visualRect(visuals[i],canvas);visuals[i].x=max(0,min(visuals[i].x,1-box.width/canvas.width));visuals[i].y=max(0,min(visuals[i].y,1-box.height/canvas.height))};settings.layout.visuals=visuals;save();syncPreview();selectionChanged();return}
 
-  if preview.telemetrySelected{settings.layout.line.size=target;save();syncPreview();return}
+  if preview.telemetrySelected{telemetryStyle.line.size=target;save();syncPreview();return}
   guard !preview.selectedCells.isEmpty else{return};var cells=settings.layout.cells ?? [:]
   let groups=(preview.elementGroups.isEmpty ? detectedGroups(preview.availableCells,[:],includeHidden:true):preview.elementGroups).filter{!$0.isDisjoint(with:preview.selectedCells)}
   for group in groups{let ids=group.intersection(preview.selectedCells);let current=(cells[String(ids.first!)]?.scale ?? 1)*20;scaleCells(ids,&cells,target/current)}
   settings.layout.cells=cells;lastOSDScale=target;save();syncPreview()
  }
  func updateOSDColourControls(){
-  if preview.telemetrySelected{let w=settings.layout.line;osdColour.color=w.colour;resetTint.isEnabled=w.red != 1 || w.green != 1 || w.blue != 1;return}
+  if preview.telemetrySelected{let w=telemetryStyle.line;osdColour.color=w.colour;resetTint.isEnabled=w.red != 1 || w.green != 1 || w.blue != 1;return}
   let cells=settings.layout.cells ?? [:];let tints=preview.selectedCells.compactMap{cells[String($0)]?.tint}
   resetTint.isEnabled = !tints.isEmpty
   if let tint=tints.first,tint.count==3{osdColour.color=NSColor(srgbRed:tint[0],green:tint[1],blue:tint[2],alpha:1)}else{osdColour.color = .white}
  }
  @objc func tintOSD(){clearMoveUndo();guard let c=osdColour.color.usingColorSpace(.sRGB) else{return}
   if let i=chosenVisuals.first,chosenVisuals.count==1,settings.layout.visuals![i].kind=="Custom"{settings.layout.visuals![i].tint=[c.redComponent,c.greenComponent,c.blueComponent];save();syncPreview();selectionChanged();return}
-  if preview.telemetrySelected{settings.layout.line.red=c.redComponent;settings.layout.line.green=c.greenComponent;settings.layout.line.blue=c.blueComponent;save();syncPreview();updateOSDColourControls();return}
+  if preview.telemetrySelected{telemetryStyle.line.red=c.redComponent;telemetryStyle.line.green=c.greenComponent;telemetryStyle.line.blue=c.blueComponent;save();syncPreview();updateOSDColourControls();return}
   var cells=settings.layout.cells ?? [:]
   for id in preview.selectedCells{var style=cells[String(id)] ?? CellStyle();style.tint=[c.redComponent,c.greenComponent,c.blueComponent];cells[String(id)]=style}
   settings.layout.cells=cells;save();syncPreview();updateOSDColourControls()
  }
- @objc func resetOSDTint(){clearMoveUndo();if let i=chosenVisuals.first,chosenVisuals.count==1,settings.layout.visuals![i].kind=="Custom"{settings.layout.visuals![i].tint=nil;save();syncPreview();selectionChanged();return};if preview.telemetrySelected{settings.layout.line.red=1;settings.layout.line.green=1;settings.layout.line.blue=1;save();syncPreview();updateOSDColourControls();return};var cells=settings.layout.cells ?? [:];for id in preview.selectedCells{var style=cells[String(id)] ?? CellStyle();style.tint=nil;cells[String(id)]=style};settings.layout.cells=cells;save();syncPreview();updateOSDColourControls()}
- @objc func hideOSDSelection(){clearMoveUndo();if !chosenVisuals.isEmpty{var visuals=settings.layout.visuals ?? defaultVisuals();let hidden = !chosenVisuals.allSatisfy{visuals[$0].hidden == true};for i in chosenVisuals{visuals[i].hidden=hidden};settings.layout.visuals=visuals;save();syncPreview();selectionChanged();return};if preview.telemetrySelected{settings.layout.telemetryHidden = !(settings.layout.telemetryHidden ?? false);save();syncPreview();selectionChanged();return};guard !preview.selectedCells.isEmpty else{return};var cells=settings.layout.cells ?? [:];let shouldHide = !preview.selectedCells.allSatisfy{cells[String($0)]?.hidden == true};for id in preview.selectedCells{var style=cells[String(id)] ?? CellStyle();style.hidden=shouldHide;cells[String(id)]=style};settings.layout.cells=cells;save();syncPreview();selectionChanged()}
+ @objc func resetOSDTint(){clearMoveUndo();if let i=chosenVisuals.first,chosenVisuals.count==1,settings.layout.visuals![i].kind=="Custom"{settings.layout.visuals![i].tint=nil;save();syncPreview();selectionChanged();return};if preview.telemetrySelected{telemetryStyle.line.red=1;telemetryStyle.line.green=1;telemetryStyle.line.blue=1;save();syncPreview();updateOSDColourControls();return};var cells=settings.layout.cells ?? [:];for id in preview.selectedCells{var style=cells[String(id)] ?? CellStyle();style.tint=nil;cells[String(id)]=style};settings.layout.cells=cells;save();syncPreview();updateOSDColourControls()}
+ @objc func hideOSDSelection(){clearMoveUndo();if !chosenVisuals.isEmpty{var visuals=settings.layout.visuals ?? defaultVisuals();let hidden = !chosenVisuals.allSatisfy{visuals[$0].hidden == true};for i in chosenVisuals{visuals[i].hidden=hidden};settings.layout.visuals=visuals;save();syncPreview();selectionChanged();return};if preview.telemetrySelected{telemetryStyle.telemetryHidden = !(telemetryStyle.telemetryHidden ?? false);save();syncPreview();selectionChanged();return};guard !preview.selectedCells.isEmpty else{return};var cells=settings.layout.cells ?? [:];let shouldHide = !preview.selectedCells.allSatisfy{cells[String($0)]?.hidden == true};for id in preview.selectedCells{var style=cells[String(id)] ?? CellStyle();style.hidden=shouldHide;cells[String(id)]=style};settings.layout.cells=cells;save();syncPreview();selectionChanged()}
  @objc func resetOSD(){clearMoveUndo();settings.layout.cells=[:];settings.layout.regions=[];clearOSDSelection();save();syncPreview()}
- func updateInspector(){alignment.selectedSegment=["Left","Centre","Right"].firstIndex(of:effectiveAlignment(settings.layout)) ?? -1;xSlider.isEnabled=true;let w=settings.layout.line;size.doubleValue=w.size;xSlider.doubleValue=w.x*100;ySlider.doubleValue=w.y*100;sizeLabel.stringValue="Line size: \(Int(w.size)) (at 1080p)";xLabel.stringValue=String(format:"Line horizontal: %.1f%%",w.x*100);yLabel.stringValue=String(format:"Line vertical: %.1f%%",w.y*100);colour.color=w.colour;preview.needsDisplay=true}
- func rememberMove(){pausePlayback();undoPresetName=activePresetName;redoPresetName=nil;redoLayout=nil;redoButton.isEnabled=false;undoLayout=settings.layout;undoCells=settings.layout.cells ?? [:];undoMoveButton.isEnabled=true}
+ func updateInspector(){alignment.selectedSegment=["Left","Centre","Right"].firstIndex(of:effectiveAlignment(telemetryStyle)) ?? -1;xSlider.isEnabled=true;let w=telemetryStyle.line;size.doubleValue=w.size;xSlider.doubleValue=w.x*100;ySlider.doubleValue=w.y*100;sizeLabel.stringValue="Line size: \(Int(w.size)) (at 1080p)";xLabel.stringValue=String(format:"Line horizontal: %.1f%%",w.x*100);yLabel.stringValue=String(format:"Line vertical: %.1f%%",w.y*100);colour.color=w.colour;preview.needsDisplay=true}
+ func rememberMove(){pausePlayback();if selectedExtra != nil{clearMoveUndo();return};undoPresetName=activePresetName;redoPresetName=nil;redoLayout=nil;redoButton.isEnabled=false;undoLayout=settings.layout;undoCells=settings.layout.cells ?? [:];undoMoveButton.isEnabled=true}
  func clearMoveUndo(){undoPresetName=nil;redoPresetName=nil;redoLayout=nil;redoButton.isEnabled=false;undoLayout=nil;undoCells=nil;undoMoveButton.isEnabled=false}
  @objc func undoMove(){guard let layout=undoLayout else{return};redoLayout=settings.layout;redoPresetName=activePresetName;activePresetName=undoPresetName ?? activePresetName;settings.layout=layout;undoPresetName=nil;undoLayout=nil;undoCells=nil;undoMoveButton.isEnabled=false;redoButton.isEnabled=true;save();syncPreview();refreshPresets();selectionChanged()}
  @objc func redoMove(){guard let layout=redoLayout else{return};undoLayout=settings.layout;undoPresetName=activePresetName;undoCells=settings.layout.cells ?? [:];activePresetName=redoPresetName ?? activePresetName;settings.layout=layout;redoPresetName=nil;redoLayout=nil;redoButton.isEnabled=false;undoMoveButton.isEnabled=true;save();syncPreview();refreshPresets();selectionChanged()}
@@ -603,8 +640,8 @@ final class App:NSObject,NSApplicationDelegate,NSWindowDelegate {
 
   guard preview.telemetrySelected || !preview.selectedCells.isEmpty else{return};rememberMove()
   if preview.telemetrySelected{
-   if let h=horizontal{settings.layout.lineAlignment=["Left","Centre","Right"][h];settings.layout.centred=h==1}
-   if let v=vertical{let text=settings.layout.displayLine(preview.values,time:preview.visualTime);let height=(text as NSString).size(withAttributes:textAttributes(settings.layout.line,1080)).height/1080;settings.layout.line.y=v==0 ? 0.02:(v==1 ? (1-height)/2:0.98-height)}
+   if let h=horizontal{telemetryStyle.lineAlignment=["Left","Centre","Right"][h];telemetryStyle.centred=h==1}
+   if let v=vertical{let text=telemetryStyle.displayLine(selectedExtra.map{additionalTelemetry[$0].sample(preview.visualTime)} ?? preview.values,time:preview.visualTime);let height=(text as NSString).size(withAttributes:textAttributes(telemetryStyle.line,1080)).height/1080;telemetryStyle.line.y=v==0 ? 0.02:(v==1 ? (1-height)/2:0.98-height)}
   }else{
    var cells=settings.layout.cells ?? [:];let b=cellBounds(preview.selectedCells,cells)
    let groups=preview.outlines.filter{!$0.isDisjoint(with:preview.selectedCells)}
@@ -629,18 +666,18 @@ final class App:NSObject,NSApplicationDelegate,NSWindowDelegate {
 
  @objc func changeTheme(){settings.layout.theme=theme.titleOfSelectedItem ?? "Dark";applyTheme();save()}
  @objc func codecChanged(){var proposed=settings.layout;proposed.codec=codec.titleOfSelectedItem ?? "H.264";if let asset=asset{guard let compatible=compatibleExportLayout(proposed,asset) else{codec.selectItem(withTitle:settings.layout.codec);return};proposed=compatible};settings.layout=proposed;codec.selectItem(withTitle:proposed.codec);save()}
- @objc func toggle(_ sender:NSButton){if cameraSource {
-   var hidden=settings.layout.hiddenCameraFields ?? []
+ @objc func toggle(_ sender:NSButton){if selectedExtra.map({additionalTelemetry[$0].camera}) ?? cameraSource {
+   var hidden=telemetryStyle.hiddenCameraFields ?? []
    let key=pickerFields[sender.tag]
    if key=="Colour Profile" {hidden.remove("Colour mode")}
-   if !primaryFields.contains(key) { var extras=settings.layout.enabledCameraExtras ?? [];if sender.state == .on {extras.insert(key)} else {extras.remove(key)};settings.layout.enabledCameraExtras=extras }
+   if !primaryFields.contains(key) { var extras=telemetryStyle.enabledCameraExtras ?? [];if sender.state == .on {extras.insert(key)} else {extras.remove(key)};telemetryStyle.enabledCameraExtras=extras }
    if sender.state == .on {hidden.remove(key)} else {hidden.insert(key)}
-   settings.layout.hiddenCameraFields=hidden
-  } else {settings.layout.widgets[sender.tag].enabled=sender.state == .on};syncPreview();save()}
+   telemetryStyle.hiddenCameraFields=hidden
+  } else {telemetryStyle.widgets[sender.tag].enabled=sender.state == .on};syncPreview();save()}
  @objc func selectField(){updateInspector()}
- @objc func styleChanged(){settings.layout.line.size=size.doubleValue;save();syncPreview();updateInspector()}
- @objc func positionChanged(_ sender:NSSlider){if sender===xSlider{settings.layout.centred=false;settings.layout.lineAlignment="Custom"};settings.layout.line.x=xSlider.doubleValue/100;settings.layout.line.y=ySlider.doubleValue/100;save();syncPreview();updateInspector()}
- @objc func colourChanged(){let c=colour.color.usingColorSpace(.sRGB) ?? .white;settings.layout.line.red=c.redComponent;settings.layout.line.green=c.greenComponent;settings.layout.line.blue=c.blueComponent;save();syncPreview()}
+ @objc func styleChanged(){telemetryStyle.line.size=size.doubleValue;save();syncPreview();updateInspector()}
+ @objc func positionChanged(_ sender:NSSlider){if sender===xSlider{telemetryStyle.centred=false;telemetryStyle.lineAlignment="Custom"};telemetryStyle.line.x=xSlider.doubleValue/100;telemetryStyle.line.y=ySlider.doubleValue/100;save();syncPreview();updateInspector()}
+ @objc func colourChanged(){let c=colour.color.usingColorSpace(.sRGB) ?? .white;telemetryStyle.line.red=c.redComponent;telemetryStyle.line.green=c.greenComponent;telemetryStyle.line.blue=c.blueComponent;save();syncPreview()}
  @objc func resetLayout(){clearMoveUndo();settings.layout=Layout();preview.selectedCells=[];save();refreshUI()}
  @objc func savePreset(){_ = savePresetAs()}
  func savePresetAs()->String?{
@@ -671,6 +708,7 @@ final class App:NSObject,NSApplicationDelegate,NSWindowDelegate {
   cues=[]
   primaryCues=[]
   additionalTelemetry=[]
+  preview.extraIndex=nil;preview.telemetrySelected=false
   importedFields=[]
   chapterSummary=""
   cameraSource=false
@@ -723,7 +761,7 @@ final class App:NSObject,NSApplicationDelegate,NSWindowDelegate {
   scrub.maxValue=duration;scrub.doubleValue=0;fullVideo()
   let same=u.deletingPathExtension().appendingPathExtension("srt");let siblings=(try? FileManager.default.contentsOfDirectory(at:u.deletingLastPathComponent(),includingPropertiesForKeys:nil)) ?? []
   let match=FileManager.default.fileExists(atPath:same.path) ? same:siblings.first{$0.pathExtension.lowercased()=="srt" && $0.deletingPathExtension().lastPathComponent.caseInsensitiveCompare(u.deletingPathExtension().lastPathComponent) == .orderedSame}
-  chapterSummary="";cameraSource=false;cues=[];primaryCues=[];additionalTelemetry=[];importedFields=[];lastSRT=nil;if let m=match{loadSRT(m)}else{status.stringValue="\(u.lastPathComponent) opened. No matching SRT found; use Import SRT Files."};updateFileLabels();startOSD(u);updateEnabled();requestPreview()
+  chapterSummary="";cameraSource=false;cues=[];primaryCues=[];additionalTelemetry=[];preview.extraIndex=nil;preview.telemetrySelected=false;importedFields=[];lastSRT=nil;if let m=match{loadSRT(m)}else{status.stringValue="\(u.lastPathComponent) opened. No matching SRT found; use Import SRT Files."};updateFileLabels();startOSD(u);updateEnabled();requestPreview()
  }
 
  func startOSD(_ video:URL){
@@ -737,7 +775,7 @@ final class App:NSObject,NSApplicationDelegate,NSWindowDelegate {
   }
  }
  func rebuildTelemetry(){
-  cues=mergeTelemetry(primaryCues,additionalTelemetry)
+  cues=primaryCues
   cameraSource=cues.contains{isCamera($0.values)}
   importedFields=cameraSource ? orderedCameraFields(cues.reduce(into:Set<String>()){ $0.formUnion($1.values.keys) }) + ["Elapsed"] : []
  }
@@ -746,8 +784,8 @@ final class App:NSObject,NSApplicationDelegate,NSWindowDelegate {
   rebuildTelemetry()
   updateFileLabels()
   updateEnabled()
-  requestPreview()
-  let count=additionalTelemetry.filter{$0.enabled}.count
+  requestPreview();selectionChanged()
+  let count=additionalTelemetry.count
   manageTelemetryButton.title="Sources (\(count))"
   status.stringValue="\(count) additional telemetry sources enabled"
  }
@@ -758,20 +796,23 @@ final class App:NSObject,NSApplicationDelegate,NSWindowDelegate {
   let panel=NSOpenPanel()
   panel.allowsMultipleSelection=true
   panel.allowedContentTypes=[UTType(filenameExtension:"srt") ?? .plainText]
-  panel.message="Add independent SRT telemetry without replacing existing sources."
+  panel.title="Add telemetry layer";panel.prompt="Add layer";panel.message="Add independent SRT telemetry without replacing existing sources."
   guard panel.runModal() == .OK else{return}
   var errors=[String]()
+  let oldCount=additionalTelemetry.count
   for file in panel.urls {
-   if additionalTelemetry.contains(where:{$0.url==file}) || file==lastSRT {continue}
    do {
     let chapters=try readChapters([file])
     let samples=joinedCues(chapters)
     guard !samples.isEmpty else{throw Problem("No supported telemetry found.")}
-    additionalTelemetry.append(AdditionalTelemetry(url:file,cues:samples))
+    var track=AdditionalTelemetry(url:file,cues:samples)
+   track.style.line=settings.layout.line;track.style.line.y=max(0.02,0.86-Double(additionalTelemetry.count%12)*0.06)
+   track.style.lineAlignment="Custom";additionalTelemetry.append(track)
    } catch {
     errors.append(file.lastPathComponent+": "+error.localizedDescription)
    }
   }
+  if additionalTelemetry.count>oldCount {preview.extraIndex=additionalTelemetry.count-1;selectTelemetry()}
   refreshAdditionalTelemetry()
   if !errors.isEmpty {
    let alert=NSAlert()
@@ -782,54 +823,39 @@ final class App:NSObject,NSApplicationDelegate,NSWindowDelegate {
  }
 
  @objc func manageTelemetrySources(){
-  guard !additionalTelemetry.isEmpty else{return}
   pausePlayback()
-  let alert=NSAlert()
-  alert.messageText="Additional telemetry sources"
-  alert.informativeText="Select a source to manage. Primary SRT and embedded OSD remain independent."
-  let picker=NSPopUpButton(frame:NSRect(x:0,y:0,width:360,height:26))
-  picker.addItems(withTitles:additionalTelemetry.map{
-   ($0.enabled ? "Enabled: ":"Disabled: ")+$0.url.lastPathComponent
-  })
-  alert.accessoryView=picker
-  alert.addButton(withTitle:"Manage")
-  alert.addButton(withTitle:"Close")
+  let menu=NSMenu()
+  func item(_ title:String,_ action:Selector,_ tag:Int){let entry=NSMenuItem(title:title,action:action,keyEquivalent:"");entry.target=self;entry.tag=tag;menu.addItem(entry)}
+  if !cues.isEmpty {item("Select primary: \(lastSRT?.lastPathComponent ?? "SRT")",#selector(selectSourceMenu(_:)),-1);item("Remove primary telemetry",#selector(removeSourceMenu(_:)),-1);menu.addItem(.separator())}
+  for (i,source) in additionalTelemetry.enumerated(){
+   item("Select T\(i+2): \(source.url.lastPathComponent)",#selector(selectSourceMenu(_:)),i)
+   item("\(source.enabled ? "Disable":"Enable") T\(i+2)",#selector(toggleSourceMenu(_:)),i)
+   item("Time offset T\(i+2)…",#selector(offsetSourceMenu(_:)),i)
+   item("Remove T\(i+2)",#selector(removeSourceMenu(_:)),i)
+   menu.addItem(.separator())
+  }
+  item("Replace primary / join DJI chapters…",#selector(replacePrimaryTelemetry),-1)
+  menu.popUp(positioning:nil,at:NSPoint(x:0,y:manageTelemetryButton.bounds.height),in:manageTelemetryButton)
+ }
+ @objc func selectSourceMenu(_ sender:NSMenuItem){preview.extraIndex=sender.tag<0 ? nil:sender.tag;selectTelemetry()}
+ @objc func toggleSourceMenu(_ sender:NSMenuItem){guard additionalTelemetry.indices.contains(sender.tag) else{return};additionalTelemetry[sender.tag].enabled.toggle();refreshAdditionalTelemetry()}
+ @objc func offsetSourceMenu(_ sender:NSMenuItem){
+  let i=sender.tag;guard additionalTelemetry.indices.contains(i) else{return}
+  let alert=NSAlert();alert.messageText=additionalTelemetry[i].url.lastPathComponent;alert.informativeText="Time offset in seconds. Positive delays telemetry."
+  let field=NSTextField(string:String(additionalTelemetry[i].offset));field.frame=NSRect(x:0,y:0,width:220,height:24);alert.accessoryView=field;alert.addButton(withTitle:"Apply");alert.addButton(withTitle:"Cancel")
   guard alert.runModal() == .alertFirstButtonReturn else{return}
-  let i=picker.indexOfSelectedItem
-  guard additionalTelemetry.indices.contains(i) else{return}
-  let source=additionalTelemetry[i]
-  let editor=NSAlert()
-  editor.messageText=source.url.lastPathComponent
-  editor.informativeText="Time offset in seconds. Positive delays telemetry; negative advances it."
-  let stack=NSStackView()
-  stack.orientation = .vertical
-  stack.alignment = .leading
-  stack.spacing=8
-  let enabled=NSButton(checkboxWithTitle:"Enable source",target:nil,action:nil)
-  enabled.state=source.enabled ? .on:.off
-  let offset=NSTextField(string:String(source.offset))
-  offset.widthAnchor.constraint(equalToConstant:240).isActive=true
-  stack.addArrangedSubview(enabled)
-  stack.addArrangedSubview(offset)
-  editor.accessoryView=stack
-  editor.addButton(withTitle:"Apply")
-  editor.addButton(withTitle:"Remove")
-  editor.addButton(withTitle:"Cancel")
-  let response=editor.runModal()
-  if response == .alertFirstButtonReturn {
-   guard let value=Double(offset.stringValue.replacingOccurrences(of:",",with:".")),value.isFinite,abs(value)<=86400 else{
-    status.stringValue="Invalid telemetry time offset."
-    return
-   }
-   additionalTelemetry[i].offset=value
-   additionalTelemetry[i].enabled=enabled.state == .on
-  } else if response == .alertSecondButtonReturn {
-   additionalTelemetry.remove(at:i)
-  } else{return}
+  guard let value=Double(field.stringValue.replacingOccurrences(of:",",with:".")),value.isFinite,abs(value)<=86400 else{status.stringValue="Invalid telemetry time offset.";return}
+  additionalTelemetry[i].offset=value;refreshAdditionalTelemetry()
+ }
+ @objc func removeSourceMenu(_ sender:NSMenuItem){removeTelemetrySource(sender.tag)}
+ @objc func removeSelectedTelemetry(){guard preview.telemetrySelected else{return};removeTelemetrySource(selectedExtra ?? -1)}
+ func removeTelemetrySource(_ i:Int){
+  pausePlayback();clearOSDSelection();preview.extraIndex=nil
+  if i<0 {primaryCues=[];lastSRT=nil;chapterSummary=""}else if additionalTelemetry.indices.contains(i){additionalTelemetry.remove(at:i)}else{return}
   refreshAdditionalTelemetry()
  }
-
- @objc func chooseSRT(){
+ @objc func chooseSRT(){if asset != nil && !cues.isEmpty {addTelemetryFiles()}else{replacePrimaryTelemetry()}}
+ @objc func replacePrimaryTelemetry(){
   pausePlayback()
   let panel=NSOpenPanel()
   panel.allowsMultipleSelection=true
@@ -876,7 +902,7 @@ final class App:NSObject,NSApplicationDelegate,NSWindowDelegate {
  func requestPreview(){updateTimeline();let t=scrub.doubleValue;player?.seek(to:CMTime(seconds:t,preferredTimescale:60000),toleranceBefore:.zero,toleranceAfter:.zero);preview.values=valuesAt(t,cues);syncPreview();timeLabel.stringValue="\(clock(t)) / \(clock(duration))";guard let gen=generator else{return};previewGeneration+=1;let token=previewGeneration
   imageQueue.async {let image=try? gen.copyCGImage(at:CMTime(seconds:t,preferredTimescale:600),actualTime:nil);DispatchQueue.main.async{guard token==self.previewGeneration else{return};if let cg=image{self.preview.frameImage=NSImage(cgImage:cg,size:.zero);self.preview.needsDisplay=true}}}
  }
- func updateFileLabels(){refreshCameraControls();srtName.stringValue=lastSRT.map{$0.lastPathComponent} ?? "SRT: none loaded";srtName.toolTip=lastSRT?.path;if !chapterSummary.isEmpty {srtName.stringValue="Joined DJI chapters (\(chapterSummary.components(separatedBy:"\n").count))";srtName.toolTip=chapterSummary};if let srt=lastSRT{let bytes=((try? srt.resourceValues(forKeys:[.fileSizeKey]))?.fileSize) ?? 0;srtInfo.stringValue="\(cameraSource ? "DJI camera" : "P1 telemetry") · \(cues.count) samples · \(rangeTime(cues.last?.end ?? 0)) · \(ByteCountFormatter.string(fromByteCount:Int64(bytes),countStyle:.file))";if !chapterSummary.isEmpty {srtInfo.stringValue="DJI camera · \(cues.count) samples · \(rangeTime(cues.last?.end ?? 0))"};srtInfo.toolTip=srtInfo.stringValue}else{srtInfo.stringValue="No matching telemetry loaded"}}
+ func updateFileLabels(){manageTelemetryButton.title="Sources (\(additionalTelemetry.count))";refreshCameraControls();srtName.stringValue=lastSRT.map{$0.lastPathComponent} ?? "SRT: none loaded";srtName.toolTip=lastSRT?.path;if !chapterSummary.isEmpty {srtName.stringValue="Joined DJI chapters (\(chapterSummary.components(separatedBy:"\n").count))";srtName.toolTip=chapterSummary};if let srt=lastSRT{let bytes=((try? srt.resourceValues(forKeys:[.fileSizeKey]))?.fileSize) ?? 0;srtInfo.stringValue="\(cameraSource ? "DJI camera" : "P1 telemetry") · \(cues.count) samples · \(rangeTime(cues.last?.end ?? 0)) · \(ByteCountFormatter.string(fromByteCount:Int64(bytes),countStyle:.file))";if !chapterSummary.isEmpty {srtInfo.stringValue="DJI camera · \(cues.count) samples · \(rangeTime(cues.last?.end ?? 0))"};srtInfo.toolTip=srtInfo.stringValue}else{srtInfo.stringValue="No matching telemetry loaded"};if !additionalTelemetry.isEmpty{srtInfo.stringValue += " · \(additionalTelemetry.count) extra"}}
  @objc func pauseMedia(){pausePlayback()}
  @objc func stopMedia(){pausePlayback();scrub.doubleValue=chosenRange()?.0 ?? 0;requestPreview()}
  func pausePlayback(){player?.pause();playbackTimer?.invalidate();playbackTimer=nil;isPlaying=false;playButton.title="";playButton.image=NSImage(systemSymbolName:"play.fill",accessibilityDescription:"Play")}
@@ -905,6 +931,7 @@ final class App:NSObject,NSApplicationDelegate,NSWindowDelegate {
  func clock(_ t:Double)->String{rangeTime(t)}
  func composition(_ asset:AVAsset,widgets:[Widget],cues:[Cue],layoutOverride:Layout?=nil,framesOverride:[OSDFrame]?=nil,rendererOverride:OSDRenderer?=nil)->AVVideoComposition {
   var layout=layoutOverride ?? settings.layout;migrateLayout(&layout);let frames=framesOverride ?? osdFrames;let renderer=rendererOverride ?? osdRenderer;let target=exportDimensions(asset,layout.outputSize ?? "Original",aspect:layout.aspectRatio);let sourcePicture=detectedPictureRect(asset);let sourceTrack=asset.tracks(withMediaType:.video).first!;let oriented=sourceTrack.naturalSize.applying(sourceTrack.preferredTransform);let nativeSize=CGSize(width:abs(oriented.width),height:abs(oriented.height))
+  let extras=layoutOverride == nil ? additionalTelemetry:[]
   let cache=TextCache()
   let composition=AVMutableVideoComposition(asset:asset,applyingCIFiltersWithHandler:{ request in
    let input=request.sourceImage;let nativeCrop=centreCrop(nativeSize,layout.aspectRatio,picture:sourcePicture);let crop=CGRect(x:nativeCrop.minX/nativeSize.width*input.extent.width,y:nativeCrop.minY/nativeSize.height*input.extent.height,width:nativeCrop.width/nativeSize.width*input.extent.width,height:nativeCrop.height/nativeSize.height*input.extent.height).offsetBy(dx:input.extent.minX,dy:input.extent.minY);let bounds=CGRect(origin:.zero,size:target);let sx=target.width/crop.width,sy=target.height/crop.height;var image=input.cropped(to:crop).transformed(by:CGAffineTransform(translationX:-crop.minX,y:-crop.minY)).applyingFilter("CILanczosScaleTransform",parameters:[kCIInputScaleKey:sy,kCIInputAspectRatioKey:sx/sy])
@@ -918,6 +945,7 @@ final class App:NSObject,NSApplicationDelegate,NSWindowDelegate {
     let x=bounds.minX+lineX(layout,textValue,bounds.width,bounds.height)-pad;let y=bounds.maxY-w.y*bounds.height-text.extent.height+pad
     image=text.transformed(by:CGAffineTransform(translationX:x,y:y)).composited(over:image)
    }
+   for track in extras where track.enabled && track.style.telemetryHidden != true {image=extraTelemetryImage(track,CMTimeGetSeconds(request.compositionTime),bounds,cache,image)}
    if let overlay=visualsLayer(layout,values,cues,CMTimeGetSeconds(request.compositionTime),target){image=overlay.composited(over:image)}
    request.finish(with:image.cropped(to:bounds),context:nil)
   });composition.renderSize=target
@@ -942,4 +970,12 @@ final class App:NSObject,NSApplicationDelegate,NSWindowDelegate {
   }}
  }
  @objc func cancelExport(){if batchRunning{batchCancelled=true};session?.cancelExport()}
+}
+
+func extraTelemetryImage(_ track:AdditionalTelemetry,_ time:Double,_ bounds:CGRect,_ cache:TextCache,_ image:CIImage)->CIImage {
+ let value=track.text(time);guard !value.isEmpty else{return image}
+ let l=track.style;let glyph=cache.image(l.line,value,bounds.height);let pad=max(3,bounds.height/360)
+ let x=bounds.minX+lineX(l,value,bounds.width,bounds.height)-pad
+ let y=bounds.maxY-l.line.y*bounds.height-glyph.extent.height+pad
+ return glyph.transformed(by:CGAffineTransform(translationX:x,y:y)).composited(over:image)
 }

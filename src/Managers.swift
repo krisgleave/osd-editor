@@ -38,7 +38,7 @@ extension App{
   for (name,id) in [("Monospaced (default)","builtin:mono"),("Sans serif","builtin:sans"),("Georgia (serif)","builtin:serif")]{textFontPopup.addItem(withTitle:name);textFontPopup.lastItem?.representedObject=id}
   for (name,id) in extraTextChoices where NSFont(name:id,size:12) != nil{textFontPopup.addItem(withTitle:name);textFontPopup.lastItem?.representedObject=id}
   for f in fonts("text"){textFontPopup.addItem(withTitle:f.name);textFontPopup.lastItem?.representedObject=f.id}
-  let textName=settings.layout.line.fontName ?? "builtin:mono"
+  let textName=telemetryStyle.line.fontName ?? "builtin:mono"
   if let f=fonts("text").first(where:{$0.postScriptName==textName}),let i=textFontPopup.itemArray.firstIndex(where:{$0.representedObject as? String==f.id}){textFontPopup.selectItem(at:i)}
   else if let i=textFontPopup.itemArray.firstIndex(where:{$0.representedObject as? String==textName}){textFontPopup.selectItem(at:i)}
   osdRename.isEnabled=selectedFont("osd") != nil;osdDelete.isEnabled=osdRename.isEnabled
@@ -54,8 +54,8 @@ extension App{
  }
  @objc func osdFontChanged(){guard let f=selectedFont("osd") else{return};settings.layout.osdFontID=f.id;applyOSDFont();save()}
  @objc func textFontChanged(){
-  if let f=selectedFont("text"){settings.layout.line.fontName=f.postScriptName}
-  else{settings.layout.line.fontName=textFontPopup.selectedItem?.representedObject as? String}
+  if let f=selectedFont("text"){telemetryStyle.line.fontName=f.postScriptName}
+  else{telemetryStyle.line.fontName=textFontPopup.selectedItem?.representedObject as? String}
   refreshFontMenus();save();syncPreview()
  }
  @objc func importFont(){importLibraryFont("osd")}
@@ -68,14 +68,14 @@ extension App{
    var postScript:String?
    if kind=="osd"{_ = try OSDRenderer(source)}else{
     postScript=try registerTextFont(source)
-    if let existing=fonts("text").first(where:{$0.postScriptName==postScript}){settings.layout.line.fontName=existing.postScriptName;refreshFontMenus();save();syncPreview();status.stringValue="This typeface is already in your library.";return}
+    if let existing=fonts("text").first(where:{$0.postScriptName==postScript}){telemetryStyle.line.fontName=existing.postScriptName;refreshFontMenus();save();syncPreview();status.stringValue="This typeface is already in your library.";return}
    }
    let id=UUID().uuidString,file=id+"."+source.pathExtension.lowercased(),destination=fontDirectory.appendingPathComponent(file)
    try Data(contentsOf:source).write(to:destination,options:.atomic)
    if kind=="text"{var error:Unmanaged<CFError>?;CTFontManagerUnregisterFontsForURL(source as CFURL,.process,&error);postScript=try registerTextFont(destination)}
    let name=uniqueName(source.deletingPathExtension().lastPathComponent,fonts(kind).map{$0.name})
    let f=LibraryFont(id:id,name:name,kind:kind,file:file,postScriptName:postScript);settings.fonts?.append(f)
-   if kind=="osd"{settings.layout.osdFontID=id;applyOSDFont()}else{settings.layout.line.fontName=postScript}
+   if kind=="osd"{settings.layout.osdFontID=id;applyOSDFont()}else{telemetryStyle.line.fontName=postScript}
    refreshFontMenus();save();syncPreview()
   }catch{libraryError(error.localizedDescription)}
  }
@@ -97,7 +97,7 @@ extension App{
    if FileManager.default.fileExists(atPath:fontURL(f).path){try FileManager.default.trashItem(at:fontURL(f),resultingItemURL:nil)}
    settings.fonts?.removeAll{$0.id==f.id}
    if kind=="osd"{settings.layout.osdFontID=fonts("osd").first?.id;settings.fontPath=nil;osdRenderer=nil;applyOSDFont()}
-   else if settings.layout.line.fontName==f.postScriptName{settings.layout.line.fontName=nil}
+   else if telemetryStyle.line.fontName==f.postScriptName{telemetryStyle.line.fontName=nil}
    refreshFontMenus();save();syncPreview()
   }catch{libraryError(error.localizedDescription)}
  }

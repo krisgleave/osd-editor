@@ -100,6 +100,15 @@ if CommandLine.arguments.contains("--camera-test") {
  precondition(samples[0].values["GBat"]=="3.42")
  precondition(samples[0].values["Signal"]=="4")
  print("PASS: Low voltage, decimal commas and missing telemetry fields")
+ } else if CommandLine.arguments.contains("--independent-telemetry-test") {
+  let a=AdditionalTelemetry(url:URL(fileURLWithPath:"/first.srt"),cues:[Cue(start:0,end:1,values:["SBat":"3.4"])])
+  var b=AdditionalTelemetry(url:URL(fileURLWithPath:"/second.srt"),cues:[Cue(start:0,end:1,values:["SBat":"4.1"])])
+  b.offset=0.5;b.style.line.size=40
+  precondition(a.sample(0.75)["SBat"]=="3.4" && b.sample(0.75)["SBat"]=="4.1")
+  precondition(b.sample(0.25).isEmpty && a.sample(1).isEmpty && b.sample(1.5).isEmpty)
+  precondition(a.style.line.size != b.style.line.size)
+  b.enabled=false;precondition(b.sample(0.75).isEmpty)
+  print("PASS: Independent telemetry values, timing, styles and visibility")
 } else if CommandLine.arguments.contains("--self-test") {
  let text="0\n00:00:00,000 --> 00:00:00,500\nSignal:4 CH: 1 SBat: 4.13 Bitrate:21Mbps\n\n1\n00:00:00,500 --> 00:00:01,000\nSignal:3 CH: 2 SBat: 4.01 Bitrate:18Mbps\n"
  let cues=parseSRT(text);precondition(cues.count==2);precondition(valuesAt(0.25,cues)["CH"]=="1");precondition(valuesAt(0.75,cues)["SBat"]=="4.01");precondition(valuesAt(2,cues).isEmpty)

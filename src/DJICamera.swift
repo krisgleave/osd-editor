@@ -62,7 +62,8 @@ extension Layout {
 
 extension App {
     func refreshCameraControls() {
-        let fields=cameraSource ? importedFields : labels
+        let camera=selectedExtra.map{additionalTelemetry[$0].camera} ?? cameraSource
+        let fields=selectedExtra.map{i in camera ? orderedCameraFields(additionalTelemetry[i].cues.reduce(into:Set<String>()){$0.formUnion($1.values.keys)})+["Elapsed"]:labels} ?? (cameraSource ? importedFields:labels)
         if fields != pickerFields {
             pickerFields=fields
             for row in fieldRows.arrangedSubviews { fieldRows.removeArrangedSubview(row);row.removeFromSuperview() }
@@ -83,16 +84,16 @@ extension App {
             }
         }
         for check in checks {
-            check.state=(cameraSource ? settings.layout.cameraFieldEnabled(fields[check.tag]) : settings.layout.widgets[check.tag].enabled) ? .on:.off
+            check.state=(camera ? telemetryStyle.cameraFieldEnabled(fields[check.tag]) : telemetryStyle.widgets[check.tag].enabled) ? .on:.off
         }
         cameraExport.isHidden = false
-        cameraExport.isEnabled = !writingCamera && !cues.isEmpty
+        cameraExport.isEnabled = !writingCamera && (!cues.isEmpty || additionalTelemetry.contains{$0.enabled})
     }
 
     @objc func exportCameraLine() {
         guard !writingCamera else { return }
         let available:[AlphaLayer]=[.telemetry,.osd,.visuals]
-        let availability:[AlphaLayer:Bool]=[.telemetry:!cues.isEmpty,.osd:!osdFrames.isEmpty && osdRenderer != nil,.visuals:(settings.layout.visuals ?? []).contains(where:{$0.enabled})]
+        let availability:[AlphaLayer:Bool]=[.telemetry:!cues.isEmpty || additionalTelemetry.contains{$0.enabled},.osd:!osdFrames.isEmpty && osdRenderer != nil,.visuals:(settings.layout.visuals ?? []).contains(where:{$0.enabled})]
         guard let choice=AlphaExportPanel(available:availability).run() else{return}
         let layers=choice.0
         guard !layers.isEmpty else {status.stringValue="Choose at least one overlay type.";return}
@@ -100,7 +101,7 @@ extension App {
         let stem=(url ?? lastSRT)?.deletingPathExtension().lastPathComponent ?? "Overlay"
         panel.nameFieldStringValue=stem+"_Overlay.mov"
         guard panel.runModal() == .OK,let chosen=panel.url else{return}
-        let layout=settings.layout,samples=cues,frames=osdFrames,renderer=osdRenderer
+        let layout=settings.layout,samples=cues,frames=osdFrames,renderer=osdRenderer,extras=additionalTelemetry
         let dimensions=asset.map { exportDimensions($0,layout.outputSize ?? "Original",aspect:layout.aspectRatio) } ?? preview.canvasSize
         let end=asset.map {CMTimeGetSeconds($0.duration)} ?? max(duration,samples.last?.end ?? 0)
         let outputs:[(Set<AlphaLayer>,URL)]
@@ -111,7 +112,7 @@ extension App {
         }}
         writingCamera=true;alphaExporting=true;bar.doubleValue=0;exportPercent.stringValue="0%";refreshCameraControls();updateEnabled();status.stringValue="Exporting transparent overlay…"
         DispatchQueue.global(qos:.userInitiated).async {
-            let result=Result { for (index,item) in outputs.enumerated() {try writeAlphaMovie(samples,layout,dimensions,item.1,item.0,frames,renderer,end) { progress in DispatchQueue.main.async {let total=(Double(index)+progress)/Double(outputs.count);self.bar.doubleValue=total*100;self.exportPercent.stringValue=String(format:"%.0f%%",total*100);self.status.stringValue="Exporting alpha \(index+1)/\(outputs.count): \(item.1.lastPathComponent)"} } } }
+            let result=Result { for (index,item) in outputs.enumerated() {try writeAlphaMovie(samples,layout,dimensions,item.1,item.0,frames,renderer,end,extras:extras) { progress in DispatchQueue.main.async {let total=(Double(index)+progress)/Double(outputs.count);self.bar.doubleValue=total*100;self.exportPercent.stringValue=String(format:"%.0f%%",total*100);self.status.stringValue="Exporting alpha \(index+1)/\(outputs.count): \(item.1.lastPathComponent)"} } } }
             DispatchQueue.main.async {self.writingCamera=false;self.alphaExporting=false;self.refreshCameraControls();self.updateEnabled();switch result {case .success:self.bar.doubleValue=100;self.status.stringValue="Saved "+outputs.map{$0.1.lastPathComponent}.joined(separator:", ");case .failure(let error):self.status.stringValue="Alpha export failed: "+error.localizedDescription}}
         }
     }
@@ -157,7 +158,7 @@ func writeCameraMovie(_ cues:[Cue], _ layout:Layout, _ size:CGSize, _ output:URL
     try writeAlphaMovie(cues,layout,size,output,Set([.telemetry]),[],nil,cues.last?.end ?? 0)
 }
 
-func writeAlphaMovie(_ cues:[Cue], _ layout:Layout, _ size:CGSize, _ output:URL, _ layers:Set<AlphaLayer>, _ frames:[OSDFrame], _ renderer:OSDRenderer?, _ timelineEnd:Double, _ reportProgress:((Double)->Void)?=nil) throws {
+func writeAlphaMovie(_ cues:[Cue], _ layout:Layout, _ size:CGSize, _ output:URL, _ layers:Set<AlphaLayer>, _ frames:[OSDFrame], _ renderer:OSDRenderer?, _ timelineEnd:Double, extras:[AdditionalTelemetry]=[], _ reportProgress:((Double)->Void)?=nil) throws {
     guard !layers.isEmpty else { throw Problem("Choose at least one overlay type.") }
     let w=Int(size.width.rounded()), h=Int(size.height.rounded())
     let bounds=CGRect(x:0,y:0,width:w,height:h)
@@ -171,9 +172,15 @@ func writeAlphaMovie(_ cues:[Cue], _ layout:Layout, _ size:CGSize, _ output:URL,
     if layers.contains(.visuals) { for cue in cues { times.insert(Int((cue.start*1000).rounded())) } }
     if layers.contains(.osd) { for frame in frames { times.insert(Int((frame.time*1000).rounded())) } }
     if layers.contains(.telemetry) && isCamera(cues.first?.values ?? [:]) && (layout.enabledCameraExtras?.contains("Elapsed") == true) { for tick in stride(from:0,through:end,by:1000) {times.insert(tick)} }
-    let changes=times.filter{$0<=end}.sorted()
+    if layers.contains(.telemetry){
+        for track in extras where track.enabled && track.style.telemetryHidden != true {
+            for cue in track.cues {for t in [cue.start+track.offset,cue.end+track.offset] where t>=0 && t<Double(end)/1000 {times.insert(Int((t*1000).rounded()))}}
+            if track.style.enabledCameraExtras?.contains("Elapsed") == true {for t in stride(from:0,through:end,by:1000){times.insert(t)}}
+        }
+    }
+    let changes=times.filter{$0>=0 && $0<end}.sorted()
     guard end > 0 else { throw Problem("No overlay timing available.") }
-    if layers.contains(.telemetry) && layout.telemetryHidden != true && cues.isEmpty { throw Problem("No telemetry is loaded.") }
+    if layers.contains(.telemetry) && layout.telemetryHidden != true && cues.isEmpty && !extras.contains(where:{$0.enabled}) { throw Problem("No telemetry is loaded.") }
     if layers.contains(.osd) && (frames.isEmpty || renderer==nil) { throw Problem("No recorded OSD is loaded.") }
     if layers.contains(.visuals) && !(layout.visuals ?? []).contains(where:{$0.enabled}) { throw Problem("No visual is enabled.") }
     
@@ -210,6 +217,7 @@ func writeAlphaMovie(_ cues:[Cue], _ layout:Layout, _ size:CGSize, _ output:URL,
             image=glyphs.transformed(by:CGAffineTransform(translationX:x,y:y)).composited(over:image)
             }
         }
+        if layers.contains(.telemetry){for track in extras where track.enabled && track.style.telemetryHidden != true{image=extraTelemetryImage(track,time,bounds,cache,image)}}
         if layers.contains(.visuals) {
             if let renderer { image=renderer.customLayer(layout.visuals?.first{$0.kind=="Custom"},size).composited(over:image) }
             if let cards=visualsLayer(layout,values,cues,time,size) { image=cards.composited(over:image) }
