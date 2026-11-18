@@ -14,7 +14,10 @@ func readChapters(_ urls:[URL]) throws -> [SRTChapter] {
     for url in urls {
         var encoding=String.Encoding.utf8
         let source=try String(contentsOf:url,usedEncoding:&encoding)
-        let cues=parseSRT(source)
+        let parsed=parseSRT(source)
+        let cues=urls.count == 1 ? parsed.filter {
+            !($0.start == $0.end && $0.start.isFinite && !isCamera($0.values))
+        } : parsed
         guard let first=cues.first else { throw Problem("No recognised telemetry in "+url.lastPathComponent) }
         if urls.count>1 {
             guard cues.allSatisfy({isCamera($0.values)}), cues.count==source.components(separatedBy:"-->").count-1 else {
