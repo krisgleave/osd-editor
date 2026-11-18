@@ -1,8 +1,8 @@
-# OSD Editor v1.2
+# OSD Editor v1.3.0
 
 Created by Kris Gleave — KrisTalksTech.
 
-OSD Editor is a desktop video editor for reconstructing recorded FPV OSD and adding telemetry overlays to exported videos. It supports editable recorded OSD from the tested BETAFPV P1 / Artlynk format and written camera telemetry from compatible DJI SRT sidecars. Release version: 1.2.
+OSD Editor is a desktop video editor for reconstructing recorded FPV OSD and adding telemetry overlays to exported videos. It supports editable recorded OSD from the tested BETAFPV P1 / Artlynk format and written camera telemetry from compatible DJI SRT sidecars. Release version: 1.3.0.
 
 It edits recordings already copied to your computer. It does not connect to a receiver or download recordings over USB. P1 Transfer is a separate project.
 
@@ -18,7 +18,7 @@ It edits recordings already copied to your computer. It does not connect to a re
 ## How it works
 
 1. Copy your recording and any matching sidecar files to the computer.
-2. Open the video. A same-name SRT in the same folder loads automatically. **Import SRT Files** imports one sidecar manually. For a Gyroflow video created from several DJI chapters, select every original DJI SRT at once. The editor orders and combines them, saves one matching SRT alongside the opened video, then loads it.
+2. Open the video. A same-name SRT in the same folder loads automatically. **Import SRT Files** imports a primary sidecar manually when none is loaded; use **Add telemetry** for independent additional sources. For a Gyroflow video created from several DJI chapters, select every original DJI SRT at once before a primary source is loaded, or use **Sources → Replace primary / join DJI chapters**. The editor orders and combines them, saves one matching SRT alongside the opened video, then loads it.
 3. Import a compatible OSD image-font PNG through the Fonts menu if prompted. The app copies imported fonts into its managed library. No third-party OSD font is bundled.
 4. Reposition and style OSD, choose the telemetry fields and optional visuals, and set the export range and format. With DJI, choose camera fields such as ISO, Shutter, EV, CT, Colour Profile, Aperture and Elapsed.
 5. Choose an export route.
@@ -43,7 +43,7 @@ The app reads recorded character codes and grid positions, rather than recognisi
 
 ## Written telemetry
 
-A single movable, resizable and colourable bottom line, with independently selectable fields:
+One or more movable, resizable and colourable lines, with independently selectable fields:
 
 - Flight time
 - SBat and GBat
@@ -55,11 +55,23 @@ A single movable, resizable and colourable bottom line, with independently selec
 
 The line supports text-font selection and alignment. Text fonts and OSD image fonts are different formats. The font library supports importing, renaming and deleting OSD PNGs and text TTF/OTF files.
 
+### Independent telemetry layers
+
+Open a video with a matching SRT (T1), or import the primary SRT manually. Click **Add telemetry** to add separate SRT files as T2, T3 and so on. Even the same SRT can be used twice for different overlay designs. Select a layer in the toolbar or **Sources** menu to set its position, font, size, colour and visible fields. Drag a line to move the entire layer. Use Sources to enable, disable, remove or adjust the time offset of an additional layer; positive seconds delay its telemetry. Source timing must match the video. To concatenate DJI chapters instead of adding independent layers, use Sources → Replace primary / join DJI chapters (or Import SRT Files before a primary source is loaded). Independent sources are intended for single-video editing, not batch jobs.
+
+### Colour individual telemetry fields and OSD groups
+
+Click a telemetry field, or start dragging a rectangle in empty preview space around the fields you want. Ctrl-click or Cmd-click toggles individual fields in the same layer. The selected fields have individual outlines. Use the colour control to tint just those fields; reset tint restores their inherited colour. Drag directly on the line to move it instead. To style the whole line, select its T1/T2/etc. toolbar target. Field selection operates within one layer at a time. OSD groups also support modified-click multi-selection, with individual outlines instead of a single enclosing outline.
+
+### Reusing additional telemetry designs
+
+Arrange and style the primary and additional lines, then save or overwrite a preset. Reapply it to another recording and import additional SRTs in the same layer order to restore the designs. Positions, font, size, alignment, field visibility and individual colours travel with the layout. Presets are not project files: they do not embed recordings, source paths, timing offsets or font files. Source enable/disable state is session-specific. Older presets can be loaded but cannot restore additional styles that were never saved.
+
 ## DJI camera telemetry
 
 DJI camera SRT sidecars contain timestamped camera metadata. The editor detects this format automatically and offers the available fields in Telemetry contents. Colour Profile is DJI’s recording profile, while Elapsed begins at `00:00:00` and advances with the recording timeline. Recording Time is the camera’s time of day and displays as `HH:MM:SS`.
 
-Gyroflow can join several DJI video chapters into one stabilised file. Export the **entire joined clip** from Gyroflow at its original speed, then open that completed video in OSD Editor. Use **Import SRT Files**, select all original SRT chapters and the app creates a combined matching sidecar in the same folder. The source chapters are left unchanged. If a same-name SRT already exists, rename or move it before combining to protect it from replacement.
+Gyroflow can join several DJI video chapters into one stabilised file. Export the **entire joined clip** from Gyroflow at its original speed, then open that completed video in OSD Editor. Use **Import SRT Files** before a primary source is loaded (otherwise use **Sources → Replace primary / join DJI chapters**), select all original SRT chapters and the app creates a combined matching sidecar in the same folder. The source chapters are left unchanged. If a same-name SRT already exists, rename or move it before combining to protect it from replacement.
 
 Do not export only a trimmed portion from Gyroflow when you intend to use the SRT unchanged. The combined SRT starts at the beginning of the flight and its timestamps no longer line up with a clip whose start or speed has changed. Export the full clip first, then trim the video and its alpha overlay together in your editor.
 
@@ -71,7 +83,7 @@ Select a card to use the top toolbar for size, alignment and visibility. Draw a 
 
 Signal colours: 1 red, 2–3 amber, 4 green. Battery and bitrate colour thresholds are editable. Defaults are battery red below 3.50 V and green from 3.75 V, and bitrate red below 4 Mbps and green from 12 Mbps. Values between the boundaries are amber.
 
-Battery thresholds currently apply to the raw displayed voltage, without cell-count conversion. Battery fill is a simple voltage graphic, not a measured state-of-charge percentage. These default voltage bands are not appropriate for every supply, especially multi-cell GBat readings. SBat/GBat cards show the recorded supply readings; regulated power may not track flight-battery discharge. Missing readings appear grey with a dash. No map or GPS route is inferred from the distance value.
+Battery thresholds currently apply to the raw displayed voltage, without cell-count conversion. Battery fill is a simple voltage graphic, not a measured state-of-charge percentage. These default voltage bands are not appropriate for every supply, especially multi-cell GBat readings. SBat/GBat cards show the recorded supply readings; regulated power may not track flight-battery discharge. Missing readings appear grey with a dash. v1.3.0 accepts decimal commas and points as well as whitespace and voltage units; it does not change threshold semantics. No map or GPS route is inferred from the distance value.
 
 ## Custom OSD text
 
@@ -93,15 +105,17 @@ The label supports selection, movement, resizing, tint, hide/show, alignment and
 - Progress percentage, cancellation and a batch report. Completed batch files remain if a later job fails or is cancelled.
 - Output names include the source name and compact export details. Numeric suffixes prevent overwriting existing exports.
 
+- I and O mark In and Out; Cmd+N starts a fresh session.
+
 ### Transparent alpha overlays
 
 Use **Export telemetry alpha only** for a silent transparent ProRes 4444 MOV. Choose any available layers.
 
-- **Telemetry** exports the written telemetry line, including DJI camera fields.
+- **TELEMETRY** lists T1 and each available additional source separately, including DJI camera fields.
 - **OSD** exports the editable recorded P1/Artlynk OSD.
 - **Visuals** exports enabled P1 visual cards and custom OSD-font text.
 
-Choose **One combined file** when the editor should combine the selected layers into one alpha movie. Choose **Separate files** when you want independent alpha movies for each selected layer in Final Cut Pro, DaVinci Resolve, Premiere Pro or another editor. Place the transparent movie above the matching footage and align both clips at their original start time. The main status bar shows alpha-export progress.
+Choose **Export Combined** when the editor should combine the selected layers into one alpha movie. Choose **Export Individual Files** when you want independent alpha movies for each selected layer in Final Cut Pro, DaVinci Resolve, Premiere Pro or another editor. Place the transparent movie above the matching footage and align both clips at their original start time. The three-column picker offers category and global selection. Visuals export as one group. Alpha movies cover the full recording timeline, regardless of In/Out. The main status bar shows progress; Finder reveals the results after success.
 
 ## Presets
 

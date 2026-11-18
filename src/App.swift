@@ -89,7 +89,7 @@ struct Widget:Codable {
  func text(_ values:[String:String])->String {"\(label): \(values[field] ?? "—")"}
 }
 func initialWidgets()->[Widget] {fieldNames.enumerated().map{Widget(field:$0.element,x:0.025+Double($0.offset%4)*0.245,y:0.84+Double($0.offset/4)*0.07)}}
-struct Layout:Codable {var enabledCameraExtras:Set<String>?;var hiddenCameraFields:Set<String>?;var centreGuides:Bool?;var visuals:[TelemetryVisual]?;var batterySource:String?;var batteryCells:Int?;var batteryRed:Double?;var batteryGreen:Double?;var bitrateRed:Double?;var bitrateGreen:Double?;var widgets=initialWidgets();var line=Widget(field:"line",x:0.12,y:0.96,size:25);var regions=[Region]();var centred:Bool?;var lineAlignment:String?;var cells:[String:CellStyle]?;var outlines:Bool?;var telemetryHidden:Bool?;var presetTitle:String?;var referenceAspect:String?;var aspectRatio:String?;var outputSize:String?;var codec="H.264";var theme="Dark";var gridEnabled:Bool?;var gridColumns:Int?;var osdFontID:String?}
+struct Layout:Codable {var additionalStyles:[Layout]?;var fieldColours:[String:[Double]]?;var enabledCameraExtras:Set<String>?;var hiddenCameraFields:Set<String>?;var centreGuides:Bool?;var visuals:[TelemetryVisual]?;var batterySource:String?;var batteryCells:Int?;var batteryRed:Double?;var batteryGreen:Double?;var bitrateRed:Double?;var bitrateGreen:Double?;var widgets=initialWidgets();var line=Widget(field:"line",x:0.12,y:0.96,size:25);var regions=[Region]();var centred:Bool?;var lineAlignment:String?;var cells:[String:CellStyle]?;var outlines:Bool?;var telemetryHidden:Bool?;var presetTitle:String?;var referenceAspect:String?;var aspectRatio:String?;var outputSize:String?;var codec="H.264";var theme="Dark";var gridEnabled:Bool?;var gridColumns:Int?;var osdFontID:String?}
 struct Settings:Codable {var layout=Layout();var presets:[String:Layout]=[:];var startup="Default";var fontPath:String?;var fonts:[LibraryFont]?;var legacyOSDFontID:String?}
 func textAttributes(_ w:Widget,_ height:CGFloat)->[NSAttributedString.Key:Any] {
  let scale=height/1080;let shadow=NSShadow();shadow.shadowColor=NSColor.black;shadow.shadowBlurRadius=2*scale;shadow.shadowOffset=NSSize(width:scale,height:-scale)
@@ -144,13 +144,18 @@ final class FlippedView:NSView {override var isFlipped:Bool{true}}
 final class Preview:NSView {
  var selectedVisuals=Set<Int>();var visualDragStarts=[Int:CGPoint]();var visualDragBounds=CGRect.zero;var visualDragOrigin=CGPoint.zero;var allVisualsSelected=false;var selectedVisual:Int?;var visualCues=[Cue]();var visualTime=0.0;var draggingVisual:Int?;var onVisualMove:((Int,Double,Double)->Void)?
 
- var extraTracks=[AdditionalTelemetry]();var extraIndex:Int?;var extraDrag:Int?
+ var selectedFields=Set<String>();var fieldLayer:Int?;var extraTracks=[AdditionalTelemetry]();var extraIndex:Int?;var extraDrag:Int?
  var telemetrySelected=false;var draggingTelemetry=false;var onTargetSelect:((Bool)->Void)?
  var layout=Layout();var osdImage:NSImage?;var mode=0;var selectionStart:NSPoint?;var selectionEnd:NSPoint?
  var selectedCells=Set<Int>();var availableCells=Set<Int>();var visibleCells=Set<Int>()
  var elementGroups=[Set<Int>]()
  var outlines:[Set<Int>]{let groups=elementGroups.isEmpty ? detectedGroups(availableCells.isEmpty ? visibleCells:availableCells,[:],includeHidden:true):elementGroups;return groups.filter{!$0.isDisjoint(with:visibleCells)}}
  func extraRect(_ track:AdditionalTelemetry)->NSRect{let r=videoRect;let t=track.text(visualTime);let s=(t as NSString).size(withAttributes:textAttributes(track.style.line,r.height));return NSRect(x:r.minX+lineX(track.style,t,r.width,r.height),y:r.minY+track.style.line.y*r.height,width:s.width,height:s.height)}
+ func boxesForLayer(_ index:Int?)->[(String,CGRect)] {
+  if let i=index {guard extraTracks.indices.contains(i),extraTracks[i].enabled else{return []};let t=extraTracks[i];return t.style.fieldBoxes(t.sample(visualTime),time:max(0,visualTime-t.offset),rect:videoRect)}
+  return layout.fieldBoxes(values,time:visualTime,rect:videoRect)
+ }
+ func selectFields(_ keys:Set<String>,layer:Int?){selectedFields=keys;fieldLayer=layer;extraIndex=layer;telemetrySelected=true;selectedCells=[];selectedVisual=nil;selectedVisuals=[];allVisualsSelected=false;onTargetSelect?(true);needsDisplay=true}
  func lineRect()->NSRect{let r=videoRect;let text=layout.displayLine(values,time:visualTime);let size=(text as NSString).size(withAttributes:textAttributes(layout.line,r.height));return NSRect(x:r.minX+lineX(layout,text,r.width,r.height),y:r.minY+layout.line.y*r.height,width:size.width,height:size.height)}
  func displayBox(_ ids:Set<Int>)->NSRect{let b=cellBounds(ids,layout.cells ?? [:]);let r=videoRect;return NSRect(x:r.minX+b.minX*r.width,y:r.minY+b.minY*r.height,width:b.width*r.width,height:b.height*r.height)}
  var onEditBegin:(()->Void)?;var editStarted=false
@@ -186,29 +191,47 @@ final class Preview:NSView {
   osdImage?.draw(in:r,from:.zero,operation:.sourceOver,fraction:1,respectFlipped:true,hints:nil)
   let line=layout.displayLine(values,time:visualTime) as NSString
   if layout.telemetryHidden == true{NSGraphicsContext.current?.cgContext.setAlpha(0.25)}
-  line.draw(at:NSPoint(x:r.minX+lineX(layout,line as String,r.width,r.height),y:r.minY+layout.line.y*r.height),withAttributes:textAttributes(layout.line,r.height))
+  layout.styledLine(values,time:visualTime,height:r.height).draw(at:NSPoint(x:r.minX+lineX(layout,line as String,r.width,r.height),y:r.minY+layout.line.y*r.height))
   NSGraphicsContext.current?.cgContext.setAlpha(1)
-  if telemetrySelected && extraIndex==nil {NSColor.systemCyan.setStroke();NSBezierPath(rect:NSRect(x:r.minX+lineX(layout,line as String,r.width,r.height),y:r.minY+layout.line.y*r.height,width:line.size(withAttributes:textAttributes(layout.line,r.height)).width,height:line.size(withAttributes:textAttributes(layout.line,r.height)).height).insetBy(dx:-3,dy:-3)).stroke()}
+  if telemetrySelected && extraIndex==nil && selectedFields.isEmpty {NSColor.systemCyan.setStroke();NSBezierPath(rect:NSRect(x:r.minX+lineX(layout,line as String,r.width,r.height),y:r.minY+layout.line.y*r.height,width:line.size(withAttributes:textAttributes(layout.line,r.height)).width,height:line.size(withAttributes:textAttributes(layout.line,r.height)).height).insetBy(dx:-3,dy:-3)).stroke()}
   for (i,track) in extraTracks.enumerated() where track.enabled {
    let text=track.text(visualTime);guard !text.isEmpty else{continue}
-   let box=extraRect(track);let attrs=textAttributes(track.style.line,r.height)
+   let box=extraRect(track)
    NSGraphicsContext.current?.cgContext.setAlpha(track.style.telemetryHidden == true ? 0.25:1)
-   (text as NSString).draw(at:box.origin,withAttributes:attrs)
+   track.style.styledLine(track.sample(visualTime),time:max(0,visualTime-track.offset),height:r.height).draw(at:box.origin)
    NSGraphicsContext.current?.cgContext.setAlpha(1)
-   if telemetrySelected && extraIndex==i{NSColor.systemCyan.setStroke();NSBezierPath(rect:box.insetBy(dx:-3,dy:-3)).stroke()}
+   if telemetrySelected && extraIndex==i && selectedFields.isEmpty{NSColor.systemCyan.setStroke();NSBezierPath(rect:box.insetBy(dx:-3,dy:-3)).stroke()}
   }
+  if telemetrySelected && !selectedFields.isEmpty {NSColor.systemCyan.setStroke();for (key,box) in boxesForLayer(extraIndex) where selectedFields.contains(key){let path=NSBezierPath(rect:box.insetBy(dx:-2,dy:-2));path.lineWidth=2;path.stroke()}}
   drawVisuals(layout,values,visualCues,visualTime,r,preview:true)
   for i in (layout.visuals ?? []).indices where (allVisualsSelected || selectedVisual==i || selectedVisuals.contains(i)) && layout.visuals![i].enabled{let visuals=layout.visuals!;let box=visualRect(visuals[i],r);NSColor.systemBlue.withAlphaComponent(0.18).setFill();NSBezierPath(rect:box).fill();NSColor.systemCyan.setStroke();let path=NSBezierPath(rect:box);path.lineWidth=2.5;path.stroke()}
   if layout.centreGuides == true{
    let guides=NSBezierPath();guides.move(to:CGPoint(x:r.midX,y:r.minY));guides.line(to:CGPoint(x:r.midX,y:r.maxY));guides.move(to:CGPoint(x:r.minX,y:r.midY));guides.line(to:CGPoint(x:r.maxX,y:r.midY));guides.lineWidth=1.25;NSColor.systemYellow.withAlphaComponent(0.9).setStroke();guides.stroke()
   }
-  if !selectedCells.isEmpty{let box=selectionRect();NSColor.systemBlue.withAlphaComponent(0.18).setFill();NSBezierPath(rect:box).fill();NSColor.systemCyan.setStroke();let border=NSBezierPath(rect:box);border.lineWidth=2.5;border.stroke();for p in [NSPoint(x:box.minX,y:box.minY),NSPoint(x:box.maxX,y:box.minY),NSPoint(x:box.minX,y:box.maxY),NSPoint(x:box.maxX,y:box.maxY)]{NSColor.white.setFill();NSBezierPath(rect:NSRect(x:p.x-3,y:p.y-3,width:6,height:6)).fill()}}
+  if !selectedCells.isEmpty {
+   let groups=elementGroups.isEmpty ? detectedGroups(selectedCells,layout.cells ?? [:],includeHidden:true):elementGroups
+   var remaining=selectedCells
+   func highlight(_ ids:Set<Int>){guard !ids.isEmpty else{return};let box=displayBox(ids);guard !box.isNull,!box.isEmpty else{return};NSColor.systemBlue.withAlphaComponent(0.18).setFill();NSBezierPath(rect:box).fill();NSColor.systemCyan.setStroke();let border=NSBezierPath(rect:box);border.lineWidth=2; border.stroke()}
+   for group in groups {let ids=remaining.intersection(group);highlight(ids);remaining.subtract(ids)}
+   for id in remaining {highlight([id])}
+  }
   NSGraphicsContext.current?.cgContext.restoreGState()
   if let a=selectionStart,let b=selectionEnd{NSColor.systemOrange.setStroke();NSBezierPath(rect:NSRect(x:min(a.x,b.x),y:min(a.y,b.y),width:abs(a.x-b.x),height:abs(a.y-b.y))).stroke()}
  }
  override func mouseDown(with event:NSEvent) {
   let p=convert(event.locationInWindow,from:nil);guard videoRect.contains(p) else{return};dragging=false;movedDuringGesture=false;editStarted=false;draggingTelemetry=false
-  draggingVisual=nil;extraDrag=nil;extraIndex=nil
+  draggingVisual=nil;extraDrag=nil
+  let modified = !event.modifierFlags.intersection([.control,.command]).isEmpty
+  if modified {
+   let layers:[Int?]=extraTracks.indices.reversed().map{Optional($0)}+[nil]
+   for layer in layers {if let hit=boxesForLayer(layer).first(where:{$0.1.contains(p)}) {var keys=telemetrySelected && fieldLayer==layer ? selectedFields:[];if keys.contains(hit.0){keys.remove(hit.0)}else{keys.insert(hit.0)};selectFields(keys,layer:layer);return}}
+  }
+  selectedFields=[];fieldLayer=nil;extraIndex=nil
+  if !event.modifierFlags.intersection([.control,.command]).isEmpty,let group=outlines.first(where:{displayBox($0).contains(p)}) {
+   selectedVisual=nil;selectedVisuals=[];allVisualsSelected=false;telemetrySelected=false
+   if group.isSubset(of:selectedCells){selectedCells.subtract(group)}else{selectedCells.formUnion(group)}
+   onSelection?(selectedCells);needsDisplay=true;return
+  }
   let visuals=layout.visuals ?? defaultVisuals()
   let existing=Set(visuals.indices.filter{visuals[$0].enabled && (allVisualsSelected || selectedVisual==$0 || selectedVisuals.contains($0))})
   if let i=visuals.indices.reversed().first(where:{visuals[$0].enabled && visualRect(visuals[$0],videoRect).contains(p)}){
@@ -232,6 +255,11 @@ final class Preview:NSView {
   let wasDragging=dragging;dragging=false
   if let a=selectionStart,let b=selectionEnd{
    let r=videoRect
+   let marquee=CGRect(x:min(a.x,b.x),y:min(a.y,b.y),width:abs(a.x-b.x),height:abs(a.y-b.y))
+   if marquee.width>3 && marquee.height>3 {
+    let layers:[Int?]=extraTracks.indices.reversed().map{Optional($0)}+[nil]
+    for layer in layers {let keys=Set(boxesForLayer(layer).filter{$0.1.intersects(marquee)}.map{$0.0});if !keys.isEmpty{selectFields(keys,layer:layer);selectionStart=nil;selectionEnd=nil;return}}
+   }
    let box=CGRect(x:(min(a.x,b.x)-r.minX)/r.width,y:(min(a.y,b.y)-r.minY)/r.height,width:abs(a.x-b.x)/r.width,height:abs(a.y-b.y)/r.height)
    if abs(a.x-b.x)>3 && abs(a.y-b.y)>3{
     selectedCells=outlines.filter{group in cellBounds(group,layout.cells ?? [:]).intersects(box)}.reduce(into:Set<Int>()){$0.formUnion($1)}
@@ -242,6 +270,7 @@ final class Preview:NSView {
     selectedCells=group;onSelection?(selectedCells)
    }
   }
+  if wasDragging && draggingTelemetry && !movedDuringGesture {let point=convert(event.locationInWindow,from:nil);if let hit=boxesForLayer(extraIndex).first(where:{$0.1.contains(point)}){selectFields([hit.0],layer:extraIndex)}}
   selectionStart=nil;selectionEnd=nil
   if wasDragging && movedDuringGesture{onSelectionFinish?()}
   needsDisplay=true
@@ -270,16 +299,50 @@ final class Preview:NSView {
  }
 
 }
+extension Layout {
+ func fieldRuns(_ values:[String:String],time:Double)->[(String,String)] {
+  if isCamera(values) {
+   var fields=orderedCameraFields(Set(values.keys));if !fields.contains("Elapsed"){fields.append("Elapsed")}
+   return fields.filter(cameraFieldEnabled).compactMap { key in
+    if key=="Elapsed" {let t=max(0,Int(time.rounded(.down)));return (key,String(format:"Elapsed: %02d:%02d:%02d",t/3600,t/60%60,t%60))}
+    return values[key].map{(key,"\(key): \($0)")}
+   }
+  }
+  return ["FlightTime","SBat","GBat","Signal","CH","Bitrate","Distance","STYMode"].compactMap { key in
+   guard let widget=widgets.first(where:{$0.field==key && $0.enabled}),values[key] != nil else{return nil}
+   return (key,telemetryLine(values,[widget]))
+  }
+ }
+ func styledLine(_ values:[String:String],time:Double,height:CGFloat)->NSAttributedString {
+  let result=NSMutableAttributedString(string:"");let attrs=textAttributes(line,height)
+  for (key,value) in fieldRuns(values,time:time) {
+   if result.length>0{result.append(NSAttributedString(string:isCamera(values) ? "   ":"  ",attributes:attrs))}
+   var a=attrs;if let rgb=fieldColours?[key],rgb.count==3{a[.foregroundColor]=NSColor(srgbRed:rgb[0],green:rgb[1],blue:rgb[2],alpha:1)}
+   result.append(NSAttributedString(string:value,attributes:a))
+  };return result
+ }
+ func fieldBoxes(_ values:[String:String],time:Double,rect:CGRect)->[(String,CGRect)] {
+  let attrs=textAttributes(line,rect.height);let runs=fieldRuns(values,time:time);let full=displayLine(values,time:time)
+  let start=lineX(self,full,rect.width,rect.height)+rect.minX
+  var prefix="";return runs.map { key,value in
+   if !prefix.isEmpty{prefix += isCamera(values) ? "   ":"  "}
+   let x=start+(prefix as NSString).size(withAttributes:attrs).width;prefix+=value
+   let end=start+(prefix as NSString).size(withAttributes:attrs).width
+   return (key,CGRect(x:x,y:rect.minY+line.y*rect.height,width:max(1,end-x),height:(value as NSString).size(withAttributes:attrs).height))
+  }
+ }
+}
 final class TextCache {
  let lock=NSLock();var images=[String:CIImage]()
- func image(_ widget:Widget,_ text:String,_ height:CGFloat)->CIImage {
-  let key="\(widget.fontName ?? "builtin:mono")|\(widget.field)|\(text)|\(widget.size)|\(widget.red)|\(widget.green)|\(widget.blue)|\(height)"
+ func image(_ widget:Widget,_ text:String,_ height:CGFloat,styled:NSAttributedString?=nil)->CIImage {
+  let styleKey=styled.map{a in var parts=[String]();a.enumerateAttribute(.foregroundColor,in:NSRange(location:0,length:a.length)){value,range,_ in parts.append("\(range):\(String(describing:value))")};return parts.joined(separator:"|")} ?? ""
+  let key=styleKey+"|\(widget.fontName ?? "builtin:mono")|\(widget.field)|\(text)|\(widget.size)|\(widget.red)|\(widget.green)|\(widget.blue)|\(height)"
   lock.lock();defer{lock.unlock()};if let image=images[key]{return image}
-  let attrs=textAttributes(widget,height);let string=text as NSString;let measured=string.size(withAttributes:attrs);let pad=max(3,height/360)
+  let attrs=textAttributes(widget,height);let string=text as NSString;let measured=styled?.size() ?? string.size(withAttributes:attrs);let pad=max(3,height/360)
   let size=NSSize(width:ceil(measured.width)+pad*2,height:ceil(measured.height)+pad*2)
   let rep=NSBitmapImageRep(bitmapDataPlanes:nil,pixelsWide:max(1,Int(size.width)),pixelsHigh:max(1,Int(size.height)),bitsPerSample:8,samplesPerPixel:4,hasAlpha:true,isPlanar:false,colorSpaceName:.deviceRGB,bytesPerRow:0,bitsPerPixel:0)!
   NSGraphicsContext.saveGraphicsState();NSGraphicsContext.current=NSGraphicsContext(bitmapImageRep:rep)
-  string.draw(at:NSPoint(x:pad,y:pad),withAttributes:attrs);NSGraphicsContext.restoreGraphicsState()
+  if let styled=styled{styled.draw(at:NSPoint(x:pad,y:pad))}else{string.draw(at:NSPoint(x:pad,y:pad),withAttributes:attrs)};NSGraphicsContext.restoreGraphicsState()
   let image=CIImage(cgImage:rep.cgImage!)
   if images.count>500 {images.removeAll(keepingCapacity:true)};images[key]=image;return image
  }
@@ -312,7 +375,21 @@ final class App:NSObject,NSApplicationDelegate,NSWindowDelegate {
  var selectedExtra:Int?{guard preview.telemetrySelected,let i=preview.extraIndex,additionalTelemetry.indices.contains(i) else{return nil};return i}
  var telemetryStyle:Layout {
   get{if let i=selectedExtra{return additionalTelemetry[i].style};return settings.layout}
-  set{if let i=selectedExtra{additionalTelemetry[i].style=newValue}else{settings.layout=newValue}}
+  set{if let i=selectedExtra{additionalTelemetry[i].style=newValue;rememberAdditionalStyles()}else{settings.layout=newValue}}
+ }
+ func styleForExtra(_ index:Int)->Layout {
+  if let styles=settings.layout.additionalStyles,styles.indices.contains(index){return styles[index]}
+  var style=Layout();style.line=settings.layout.line;style.line.y=max(0.02,0.86-Double(index%12)*0.06);style.lineAlignment="Custom";return style
+ }
+ func rememberAdditionalStyles(){
+  guard !additionalTelemetry.isEmpty else{return}
+  var styles=settings.layout.additionalStyles ?? []
+  for (i,track) in additionalTelemetry.enumerated(){var style=track.style;style.additionalStyles=nil;if styles.indices.contains(i){styles[i]=style}else{styles.append(style)}}
+  settings.layout.additionalStyles=styles
+ }
+ func restoreAdditionalStyles(){
+  for i in additionalTelemetry.indices{additionalTelemetry[i].style=styleForExtra(i)}
+  preview.extraIndex=nil;preview.selectedFields=[];preview.fieldLayer=nil
  }
  var primaryCues=[Cue]()
  var additionalTelemetry=[AdditionalTelemetry]()
@@ -350,7 +427,7 @@ final class App:NSObject,NSApplicationDelegate,NSWindowDelegate {
   fileMenu.addItem(newItem)
   fileItem.submenu=fileMenu
   NSApp.mainMenu=menu
-  window.title="OSD Editor v1.2 — by KrisTalksTech";window.minSize=NSSize(width:1220,height:740);window.collectionBehavior.insert(.fullScreenPrimary);window.center()
+  window.title="OSD Editor v1.3.0 — by KrisTalksTech";window.minSize=NSSize(width:1220,height:740);window.collectionBehavior.insert(.fullScreenPrimary);window.center()
   let root=NSStackView();root.orientation = .vertical;root.distribution = .fill;root.alignment = .leading;root.spacing=10;root.translatesAutoresizingMaskIntoConstraints=false;window.contentView!.addSubview(root)
   NSLayoutConstraint.activate([root.leadingAnchor.constraint(equalTo:window.contentView!.leadingAnchor,constant:20),root.trailingAnchor.constraint(equalTo:window.contentView!.trailingAnchor,constant:-20),root.topAnchor.constraint(equalTo:window.contentView!.topAnchor,constant:18),root.bottomAnchor.constraint(equalTo:window.contentView!.bottomAnchor,constant:-18)])
   let toolbar=NSStackView();toolbar.spacing=10
@@ -466,8 +543,12 @@ final class App:NSObject,NSApplicationDelegate,NSWindowDelegate {
   preview.onCellMove = {[weak self] x,y in guard let self=self else{return};var cells=self.settings.layout.cells ?? [:];moveCells(self.preview.selectedCells,&cells,x,y);self.settings.layout.cells=cells;self.save();self.syncPreview()}
   refreshFontMenus();applyOSDFont()
   spaceMonitor=NSEvent.addLocalMonitorForEvents(matching:.keyDown){[weak self] event in
-   guard let self=self,event.keyCode==49,event.modifierFlags.intersection([.command,.control,.option]).isEmpty,NSApp.keyWindow===self.window,!(self.window.firstResponder is NSTextView) else{return event}
-   if !event.isARepeat{self.togglePlayback()};return nil
+   guard let self=self,event.modifierFlags.intersection([.command,.control,.option]).isEmpty,NSApp.keyWindow===self.window,!(self.window.firstResponder is NSTextView) else{return event}
+   if event.keyCode==49 {if !event.isARepeat{self.togglePlayback()};return nil}
+   if self.timelineView.trimmingEnabled,let key=event.charactersIgnoringModifiers?.lowercased(),["i","o"].contains(key) {
+    if !event.isARepeat {if key=="i"{self.setStartHere()}else{self.setEndHere()}};return nil
+   }
+   return event
   }
   setBatchSources([]);refreshUI();save();window.contentView?.layoutSubtreeIfNeeded();inspector.contentView.scroll(to:.zero);inspector.reflectScrolledClipView(inspector.contentView);window.makeKeyAndOrderFront(nil);NSApp.activate(ignoringOtherApps:true)
   if let i=CommandLine.arguments.firstIndex(of:"--preview-video"),CommandLine.arguments.count>i+1{loadVideo(URL(fileURLWithPath:CommandLine.arguments[i+1]))}
@@ -489,7 +570,7 @@ final class App:NSObject,NSApplicationDelegate,NSWindowDelegate {
  }
  func persistClosingChanges()->Bool{do{try JSONEncoder().encode(settings).write(to:settingsURL,options:.atomic);return true}catch{libraryError("Couldn’t save your changes: "+error.localizedDescription);return false}}
  func saveActiveChanges()->Bool{if activePresetName=="Default"{guard savePresetAs() != nil else{return false}}else{overwritePreset()};return persistClosingChanges()}
- func discardActiveChanges(){settings.layout=presetDefinition(activePresetName) ?? defaultLayout();refreshUI()}
+ func discardActiveChanges(){settings.layout=presetDefinition(activePresetName) ?? defaultLayout();restoreAdditionalStyles();refreshUI()}
  var shouldPromptToSaveLayout:Bool{asset != nil && presetDirty()}
  func confirmCloseChanges()->Bool{
   guard shouldPromptToSaveLayout else{return true}
@@ -524,7 +605,7 @@ final class App:NSObject,NSApplicationDelegate,NSWindowDelegate {
   for item in presetManage.itemArray where ["Rename…","Delete"].contains(item.title){item.isEnabled=activePresetName != "Default"}
  }
  func applyPreset(_ name:String,prepared:Layout?=nil){
-  guard var layout=prepared ?? (name=="Default" ? defaultForCurrentFrame():presetDefinition(name)) else{return};pausePlayback();clearMoveUndo();activePresetName=name;migrateLayout(&layout);settings.layout=layout;preview.selectedCells=[];preview.telemetrySelected=false;applyOSDFont();save();refreshUI()
+  guard var layout=prepared ?? (name=="Default" ? defaultForCurrentFrame():presetDefinition(name)) else{return};pausePlayback();clearMoveUndo();activePresetName=name;migrateLayout(&layout);settings.layout=layout;restoreAdditionalStyles();preview.selectedCells=[];preview.telemetrySelected=false;applyOSDFont();save();refreshUI()
  }
  func requestPreset(_ name:String){
   guard var proposed=(name=="Default" ? defaultForCurrentFrame():presetDefinition(name)) else{refreshPresets();return}
@@ -546,7 +627,7 @@ final class App:NSObject,NSApplicationDelegate,NSWindowDelegate {
  }
  @objc func presetSelected(){if let name=preset.selectedItem?.representedObject as? String{requestPreset(name)}}
  @objc func resetToDefault(){requestPreset("Default")}
- @objc func overwritePreset(){guard activePresetName != "Default",settings.presets[activePresetName] != nil else{return};settings.layout.referenceAspect=aspectLabel(preview.canvasSize);settings.presets[activePresetName]=settings.layout;save();updatePresetSaveState();status.stringValue="Saved preset: "+displayPresetName(activePresetName)}
+ @objc func overwritePreset(){guard activePresetName != "Default",settings.presets[activePresetName] != nil else{return};rememberAdditionalStyles();settings.layout.referenceAspect=aspectLabel(preview.canvasSize);settings.presets[activePresetName]=settings.layout;save();updatePresetSaveState();status.stringValue="Saved preset: "+displayPresetName(activePresetName)}
  func refreshPresets(){
   let ratio=aspectLabel(preview.canvasSize)
   if settings.startup != "Default",let launch=settings.presets[settings.startup],presetAspect(launch) != ratio{settings.startup="Default";save()}
@@ -579,7 +660,7 @@ final class App:NSObject,NSApplicationDelegate,NSWindowDelegate {
   if let i=selectedExtra{selectionChooser.selectedSegment=i+3;selectionLabel.stringValue=additionalTelemetry[i].url.lastPathComponent}
   refreshCameraControls();refreshFontMenus();updateInspector();updateStatusSummary();updateEnabled();preview.needsDisplay=true
  }
- @objc func selectionChoiceChanged(){let i=selectionChooser.selectedSegment;preview.extraIndex=nil;if i==1{selectAllOSD()}else if i==2{selectTelemetry()}else if i==3+additionalTelemetry.count{selectAllVisuals()}else if additionalTelemetry.indices.contains(i-3){preview.extraIndex=i-3;selectTelemetry()}else{clearOSDSelection()}}
+ @objc func selectionChoiceChanged(){let i=selectionChooser.selectedSegment;preview.selectedFields=[];preview.fieldLayer=nil;preview.extraIndex=nil;if i==1{selectAllOSD()}else if i==2{selectTelemetry()}else if i==3+additionalTelemetry.count{selectAllVisuals()}else if additionalTelemetry.indices.contains(i-3){preview.extraIndex=i-3;selectTelemetry()}else{clearOSDSelection()}}
  var chosenVisuals:[Int]{let visuals=settings.layout.visuals ?? [];return visuals.indices.filter{visuals[$0].enabled && (preview.allVisualsSelected || preview.selectedVisual==$0 || preview.selectedVisuals.contains($0))}}
  @objc func selectAllVisuals(){preview.selectedVisuals=[];preview.allVisualsSelected=true;preview.selectedVisual=nil;preview.selectedCells=[];preview.telemetrySelected=false;selectionChanged()}
  @objc func selectTelemetry(){preview.selectedVisuals=[];preview.allVisualsSelected=false;preview.selectedVisual=nil;preview.selectedCells=[];preview.telemetrySelected=true;selectionChanged()}
@@ -596,6 +677,7 @@ final class App:NSObject,NSApplicationDelegate,NSWindowDelegate {
   settings.layout.cells=cells;lastOSDScale=target;save();syncPreview()
  }
  func updateOSDColourControls(){
+  if preview.telemetrySelected && !preview.selectedFields.isEmpty {let colours=telemetryStyle.fieldColours ?? [:];let rgb=preview.selectedFields.sorted().compactMap{colours[$0]}.first;osdColour.color=rgb.map{NSColor(srgbRed:$0[0],green:$0[1],blue:$0[2],alpha:1)} ?? telemetryStyle.line.colour;resetTint.isEnabled=rgb != nil;return}
   if preview.telemetrySelected{let w=telemetryStyle.line;osdColour.color=w.colour;resetTint.isEnabled=w.red != 1 || w.green != 1 || w.blue != 1;return}
   let cells=settings.layout.cells ?? [:];let tints=preview.selectedCells.compactMap{cells[String($0)]?.tint}
   resetTint.isEnabled = !tints.isEmpty
@@ -603,12 +685,13 @@ final class App:NSObject,NSApplicationDelegate,NSWindowDelegate {
  }
  @objc func tintOSD(){clearMoveUndo();guard let c=osdColour.color.usingColorSpace(.sRGB) else{return}
   if let i=chosenVisuals.first,chosenVisuals.count==1,settings.layout.visuals![i].kind=="Custom"{settings.layout.visuals![i].tint=[c.redComponent,c.greenComponent,c.blueComponent];save();syncPreview();selectionChanged();return}
+  if preview.telemetrySelected && !preview.selectedFields.isEmpty {var colours=telemetryStyle.fieldColours ?? [:];for key in preview.selectedFields{colours[key]=[c.redComponent,c.greenComponent,c.blueComponent]};telemetryStyle.fieldColours=colours;save();syncPreview();updateOSDColourControls();return}
   if preview.telemetrySelected{telemetryStyle.line.red=c.redComponent;telemetryStyle.line.green=c.greenComponent;telemetryStyle.line.blue=c.blueComponent;save();syncPreview();updateOSDColourControls();return}
   var cells=settings.layout.cells ?? [:]
   for id in preview.selectedCells{var style=cells[String(id)] ?? CellStyle();style.tint=[c.redComponent,c.greenComponent,c.blueComponent];cells[String(id)]=style}
   settings.layout.cells=cells;save();syncPreview();updateOSDColourControls()
  }
- @objc func resetOSDTint(){clearMoveUndo();if let i=chosenVisuals.first,chosenVisuals.count==1,settings.layout.visuals![i].kind=="Custom"{settings.layout.visuals![i].tint=nil;save();syncPreview();selectionChanged();return};if preview.telemetrySelected{telemetryStyle.line.red=1;telemetryStyle.line.green=1;telemetryStyle.line.blue=1;save();syncPreview();updateOSDColourControls();return};var cells=settings.layout.cells ?? [:];for id in preview.selectedCells{var style=cells[String(id)] ?? CellStyle();style.tint=nil;cells[String(id)]=style};settings.layout.cells=cells;save();syncPreview();updateOSDColourControls()}
+ @objc func resetOSDTint(){clearMoveUndo();if let i=chosenVisuals.first,chosenVisuals.count==1,settings.layout.visuals![i].kind=="Custom"{settings.layout.visuals![i].tint=nil;save();syncPreview();selectionChanged();return};if preview.telemetrySelected && !preview.selectedFields.isEmpty{var colours=telemetryStyle.fieldColours ?? [:];for key in preview.selectedFields{colours.removeValue(forKey:key)};telemetryStyle.fieldColours=colours;save();syncPreview();updateOSDColourControls();return};if preview.telemetrySelected{telemetryStyle.fieldColours=nil;telemetryStyle.line.red=1;telemetryStyle.line.green=1;telemetryStyle.line.blue=1;save();syncPreview();updateOSDColourControls();return};var cells=settings.layout.cells ?? [:];for id in preview.selectedCells{var style=cells[String(id)] ?? CellStyle();style.tint=nil;cells[String(id)]=style};settings.layout.cells=cells;save();syncPreview();updateOSDColourControls()}
  @objc func hideOSDSelection(){clearMoveUndo();if !chosenVisuals.isEmpty{var visuals=settings.layout.visuals ?? defaultVisuals();let hidden = !chosenVisuals.allSatisfy{visuals[$0].hidden == true};for i in chosenVisuals{visuals[i].hidden=hidden};settings.layout.visuals=visuals;save();syncPreview();selectionChanged();return};if preview.telemetrySelected{telemetryStyle.telemetryHidden = !(telemetryStyle.telemetryHidden ?? false);save();syncPreview();selectionChanged();return};guard !preview.selectedCells.isEmpty else{return};var cells=settings.layout.cells ?? [:];let shouldHide = !preview.selectedCells.allSatisfy{cells[String($0)]?.hidden == true};for id in preview.selectedCells{var style=cells[String(id)] ?? CellStyle();style.hidden=shouldHide;cells[String(id)]=style};settings.layout.cells=cells;save();syncPreview();selectionChanged()}
  @objc func resetOSD(){clearMoveUndo();settings.layout.cells=[:];settings.layout.regions=[];clearOSDSelection();save();syncPreview()}
  func updateInspector(){alignment.selectedSegment=["Left","Centre","Right"].firstIndex(of:effectiveAlignment(telemetryStyle)) ?? -1;xSlider.isEnabled=true;let w=telemetryStyle.line;size.doubleValue=w.size;xSlider.doubleValue=w.x*100;ySlider.doubleValue=w.y*100;sizeLabel.stringValue="Line size: \(Int(w.size)) (at 1080p)";xLabel.stringValue=String(format:"Line horizontal: %.1f%%",w.x*100);yLabel.stringValue=String(format:"Line vertical: %.1f%%",w.y*100);colour.color=w.colour;preview.needsDisplay=true}
@@ -662,7 +745,7 @@ final class App:NSObject,NSApplicationDelegate,NSWindowDelegate {
  @objc func alignmentChanged(){guard alignment.selectedSegment>=0 else{return};alignSelection(alignment.selectedSegment,nil)}
  @objc func verticalAlignmentChanged(){guard verticalAlign.selectedSegment>=0 else{return};alignSelection(nil,verticalAlign.selectedSegment)}
  @objc func openFontWebsite(){NSWorkspace.shared.open(URL(string:"https://sites.google.com/view/sneaky-fpv/home")!)}
- @objc func about(){let a=NSAlert();a.messageText="OSD Editor v1.2.0 — by KrisTalksTech";a.informativeText="Copyright © 2026 Kris Gleave (KrisTalksTech).\n\nEdit recorded FPV OSD, telemetry and video. Supports BETAFPV P1 / Artlynk telemetry and DJI camera SRT files.\n\nFree software under GPL-3.0-or-later; redistribution and modification are permitted under that licence. Provided WITHOUT ANY WARRANTY.\n\nIncludes OSD parsing adapted from ksielick/walksnail-osd-tool and Alexander van Saase’s upstream project. See Credits for provenance. Fonts have separate licences and are not bundled.";a.addButton(withTitle:"OK");a.addButton(withTitle:"Licence");a.addButton(withTitle:"Credits");let response=a.runModal();let name=response == .alertSecondButtonReturn ? "LICENSE":(response == .alertThirdButtonReturn ? "THIRD_PARTY_NOTICES":nil);if let name=name,let url=Bundle.main.url(forResource:name,withExtension:"txt"){NSWorkspace.shared.open(url)}}
+ @objc func about(){let a=NSAlert();a.messageText="OSD Editor v1.3.0 — by KrisTalksTech";a.informativeText="Copyright © 2026 Kris Gleave (KrisTalksTech).\n\nEdit recorded FPV OSD, telemetry and video. Supports BETAFPV P1 / Artlynk telemetry and DJI camera SRT files.\n\nFree software under GPL-3.0-or-later; redistribution and modification are permitted under that licence. Provided WITHOUT ANY WARRANTY.\n\nIncludes OSD parsing adapted from ksielick/walksnail-osd-tool and Alexander van Saase’s upstream project. See Credits for provenance. Fonts have separate licences and are not bundled.";a.addButton(withTitle:"OK");a.addButton(withTitle:"Licence");a.addButton(withTitle:"Credits");let response=a.runModal();let name=response == .alertSecondButtonReturn ? "LICENSE":(response == .alertThirdButtonReturn ? "THIRD_PARTY_NOTICES":nil);if let name=name,let url=Bundle.main.url(forResource:name,withExtension:"txt"){NSWorkspace.shared.open(url)}}
 
  @objc func changeTheme(){settings.layout.theme=theme.titleOfSelectedItem ?? "Dark";applyTheme();save()}
  @objc func codecChanged(){var proposed=settings.layout;proposed.codec=codec.titleOfSelectedItem ?? "H.264";if let asset=asset{guard let compatible=compatibleExportLayout(proposed,asset) else{codec.selectItem(withTitle:settings.layout.codec);return};proposed=compatible};settings.layout=proposed;codec.selectItem(withTitle:proposed.codec);save()}
@@ -678,7 +761,7 @@ final class App:NSObject,NSApplicationDelegate,NSWindowDelegate {
  @objc func styleChanged(){telemetryStyle.line.size=size.doubleValue;save();syncPreview();updateInspector()}
  @objc func positionChanged(_ sender:NSSlider){if sender===xSlider{telemetryStyle.centred=false;telemetryStyle.lineAlignment="Custom"};telemetryStyle.line.x=xSlider.doubleValue/100;telemetryStyle.line.y=ySlider.doubleValue/100;save();syncPreview();updateInspector()}
  @objc func colourChanged(){let c=colour.color.usingColorSpace(.sRGB) ?? .white;telemetryStyle.line.red=c.redComponent;telemetryStyle.line.green=c.greenComponent;telemetryStyle.line.blue=c.blueComponent;save();syncPreview()}
- @objc func resetLayout(){clearMoveUndo();settings.layout=Layout();preview.selectedCells=[];save();refreshUI()}
+ @objc func resetLayout(){clearMoveUndo();settings.layout=Layout();restoreAdditionalStyles();preview.selectedCells=[];save();refreshUI()}
  @objc func savePreset(){_ = savePresetAs()}
  func savePresetAs()->String?{
   let a=NSAlert();a.messageText="Save layout preset";let input=NSTextField(frame:NSRect(x:0,y:0,width:260,height:24));a.accessoryView=input;a.addButton(withTitle:"Save");a.addButton(withTitle:"Cancel")
@@ -686,7 +769,7 @@ final class App:NSObject,NSApplicationDelegate,NSWindowDelegate {
   guard !name.isEmpty,name.caseInsensitiveCompare("Default") != .orderedSame,name != "Last settings" else{libraryError("Choose a name other than Default.");return nil}
   let ratio=aspectLabel(preview.canvasSize)
   if existingPreset(named:name,aspect:ratio) != nil{let confirm=NSAlert();confirm.messageText="Replace preset ‘\(name)’?";confirm.informativeText="A \(ratio) preset with this name already exists. The other aspect-ratio versions are separate.";confirm.addButton(withTitle:"Replace");confirm.addButton(withTitle:"Cancel");guard confirm.runModal() == .alertFirstButtonReturn else{return nil}}
-  settings.layout.referenceAspect=ratio
+  rememberAdditionalStyles();settings.layout.referenceAspect=ratio
   do{let key=try storePreset(named:name,layout:settings.layout,replace:true);settings.layout=settings.presets[key]!;activePresetName=key;save();refreshPresets();return key}catch{libraryError(error.localizedDescription);return nil}
 
  }
@@ -708,7 +791,7 @@ final class App:NSObject,NSApplicationDelegate,NSWindowDelegate {
   cues=[]
   primaryCues=[]
   additionalTelemetry=[]
-  preview.extraIndex=nil;preview.telemetrySelected=false
+  preview.extraIndex=nil;preview.selectedFields=[];preview.fieldLayer=nil;preview.telemetrySelected=false
   importedFields=[]
   chapterSummary=""
   cameraSource=false
@@ -761,7 +844,7 @@ final class App:NSObject,NSApplicationDelegate,NSWindowDelegate {
   scrub.maxValue=duration;scrub.doubleValue=0;fullVideo()
   let same=u.deletingPathExtension().appendingPathExtension("srt");let siblings=(try? FileManager.default.contentsOfDirectory(at:u.deletingLastPathComponent(),includingPropertiesForKeys:nil)) ?? []
   let match=FileManager.default.fileExists(atPath:same.path) ? same:siblings.first{$0.pathExtension.lowercased()=="srt" && $0.deletingPathExtension().lastPathComponent.caseInsensitiveCompare(u.deletingPathExtension().lastPathComponent) == .orderedSame}
-  chapterSummary="";cameraSource=false;cues=[];primaryCues=[];additionalTelemetry=[];preview.extraIndex=nil;preview.telemetrySelected=false;importedFields=[];lastSRT=nil;if let m=match{loadSRT(m)}else{status.stringValue="\(u.lastPathComponent) opened. No matching SRT found; use Import SRT Files."};updateFileLabels();startOSD(u);updateEnabled();requestPreview()
+  chapterSummary="";cameraSource=false;cues=[];primaryCues=[];additionalTelemetry=[];preview.extraIndex=nil;preview.selectedFields=[];preview.fieldLayer=nil;preview.telemetrySelected=false;importedFields=[];lastSRT=nil;if let m=match{loadSRT(m)}else{status.stringValue="\(u.lastPathComponent) opened. No matching SRT found; use Import SRT Files."};updateFileLabels();startOSD(u);updateEnabled();requestPreview()
  }
 
  func startOSD(_ video:URL){
@@ -806,8 +889,7 @@ final class App:NSObject,NSApplicationDelegate,NSWindowDelegate {
     let samples=joinedCues(chapters)
     guard !samples.isEmpty else{throw Problem("No supported telemetry found.")}
     var track=AdditionalTelemetry(url:file,cues:samples)
-   track.style.line=settings.layout.line;track.style.line.y=max(0.02,0.86-Double(additionalTelemetry.count%12)*0.06)
-   track.style.lineAlignment="Custom";additionalTelemetry.append(track)
+   track.style=styleForExtra(additionalTelemetry.count);additionalTelemetry.append(track)
    } catch {
     errors.append(file.lastPathComponent+": "+error.localizedDescription)
    }
@@ -851,7 +933,7 @@ final class App:NSObject,NSApplicationDelegate,NSWindowDelegate {
  @objc func removeSelectedTelemetry(){guard preview.telemetrySelected else{return};removeTelemetrySource(selectedExtra ?? -1)}
  func removeTelemetrySource(_ i:Int){
   pausePlayback();clearOSDSelection();preview.extraIndex=nil
-  if i<0 {primaryCues=[];lastSRT=nil;chapterSummary=""}else if additionalTelemetry.indices.contains(i){additionalTelemetry.remove(at:i)}else{return}
+  if i<0 {primaryCues=[];lastSRT=nil;chapterSummary=""}else if additionalTelemetry.indices.contains(i){additionalTelemetry.remove(at:i);rememberAdditionalStyles();save()}else{return}
   refreshAdditionalTelemetry()
  }
  @objc func chooseSRT(){if asset != nil && !cues.isEmpty {addTelemetryFiles()}else{replacePrimaryTelemetry()}}
@@ -941,7 +1023,7 @@ final class App:NSObject,NSApplicationDelegate,NSWindowDelegate {
    if let renderer=renderer{image=renderer.customLayer(layout.visuals?.first{$0.kind=="Custom"},target).composited(over:image)}
    let textValue=layout.displayLine(values,time:CMTimeGetSeconds(request.compositionTime))
    if !textValue.isEmpty && layout.telemetryHidden != true{
-    let w=layout.line;let text=cache.image(w,textValue,bounds.height);let pad=max(3,bounds.height/360)
+    let w=layout.line;let text=cache.image(w,textValue,bounds.height,styled:layout.styledLine(values,time:CMTimeGetSeconds(request.compositionTime),height:bounds.height));let pad=max(3,bounds.height/360)
     let x=bounds.minX+lineX(layout,textValue,bounds.width,bounds.height)-pad;let y=bounds.maxY-w.y*bounds.height-text.extent.height+pad
     image=text.transformed(by:CGAffineTransform(translationX:x,y:y)).composited(over:image)
    }
@@ -974,7 +1056,7 @@ final class App:NSObject,NSApplicationDelegate,NSWindowDelegate {
 
 func extraTelemetryImage(_ track:AdditionalTelemetry,_ time:Double,_ bounds:CGRect,_ cache:TextCache,_ image:CIImage)->CIImage {
  let value=track.text(time);guard !value.isEmpty else{return image}
- let l=track.style;let glyph=cache.image(l.line,value,bounds.height);let pad=max(3,bounds.height/360)
+ let l=track.style;let glyph=cache.image(l.line,value,bounds.height,styled:l.styledLine(track.sample(time),time:max(0,time-track.offset),height:bounds.height));let pad=max(3,bounds.height/360)
  let x=bounds.minX+lineX(l,value,bounds.width,bounds.height)-pad
  let y=bounds.maxY-l.line.y*bounds.height-glyph.extent.height+pad
  return glyph.transformed(by:CGAffineTransform(translationX:x,y:y)).composited(over:image)

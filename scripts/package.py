@@ -2,7 +2,7 @@
 """Package an ad-hoc signed Apple Silicon release; does not notarize or publish."""
 from pathlib import Path
 import hashlib,plistlib,shutil,struct,subprocess,tempfile,zipfile
-ROOT=Path(__file__).resolve().parents[1];VERSION='1.2.0';BUILD='120';dist=ROOT/'dist';dist.mkdir(exist_ok=True)
+ROOT=Path(__file__).resolve().parents[1];VERSION='1.3.0';BUILD='130';dist=ROOT/'dist';dist.mkdir(exist_ok=True)
 binary=ROOT/'build/OSDEditor'
 if not binary.exists():raise SystemExit('Run python3 scripts/build.py first.')
 with tempfile.TemporaryDirectory(prefix='osd-editor-package-') as tmp:
@@ -29,7 +29,7 @@ with tempfile.TemporaryDirectory(prefix='osd-editor-package-') as tmp:
  with zipfile.ZipFile(zip_path,'w',zipfile.ZIP_DEFLATED) as z:
   for f in app.rglob('*'):
    if f.is_file():z.write(f,f.relative_to(tmp))
-  for name in ['README.md','LICENSE','THIRD_PARTY_NOTICES.md']:z.write(ROOT/name,name)
+  for name in ['README.md','LICENSE','THIRD_PARTY_NOTICES.md','CHANGELOG.md','RELEASE_NOTES.md','SUPPORT.md']:z.write(ROOT/name,name)
   for f in (ROOT/'docs').glob('*.md'):z.write(f,'docs/'+f.name)
 source=dist/f'OSD-Editor-{VERSION}-source.zip'
 with zipfile.ZipFile(source,'w',zipfile.ZIP_DEFLATED) as z:

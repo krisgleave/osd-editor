@@ -4,7 +4,7 @@ Open OSD Editor and click **Import SRT Files**. A DJI camera sidecar can be open
 
 Scrub the timeline to see the settings change. Under **Telemetry contents**, choose ISO, Shutter, EV, CT and Colour Profile. Select the telemetry line in the preview to reposition it and use the existing telemetry text, size, colour and alignment controls. Save a preset to reuse the layout.
 
-**Export camera line with alpha…** creates a silent ProRes 4444 MOV containing the visible camera line for the full SRT duration. Position its start at the original clip start in your video editor. With just the SRT loaded, the default canvas is 1920 × 1080. With video loaded, the export uses its configured output dimensions. **Export video…** uses the existing video workflow, including trim and other enabled overlays.
+**Export telemetry alpha only…** creates a silent ProRes 4444 MOV containing the visible camera line for the full SRT duration. Position its start at the original clip start in your video editor. With just the SRT loaded, the default canvas is 1920 × 1080. With video loaded, the export uses its configured output dimensions. **Export video…** uses the existing video workflow, including trim and other enabled overlays.
 
 
 ## A Gyroflow video made from multiple DJI chapters
@@ -15,7 +15,7 @@ The editor sorts by the first embedded recording date and time when every chapte
 
 Export the complete joined Gyroflow clip before importing the SRT chapters. A trimmed or retimed Gyroflow output has different timing from the original SRT, so the telemetry will not align. Trim the full video and any alpha overlay together afterwards in your editor.
 
-Use **Import SRT Files** after opening the joined Gyroflow video. Selecting one file imports it normally. Selecting several original DJI chapters orders and joins them automatically, then saves one SRT alongside the video with the same base name. That file loads automatically with the video on future edits.
+Use **Import SRT Files** after opening the joined Gyroflow video if no primary source is loaded; otherwise use **Sources → Replace primary / join DJI chapters**. Selecting one file imports it normally. Selecting several original DJI chapters orders and joins them automatically, then saves one SRT alongside the video with the same base name. That file loads automatically with the video on future edits.
 
 The two-column field picker includes the fields found across all selected chapters. Five camera settings are enabled initially. Other fields, including frame-level details, can be enabled individually and saved in presets. The date and time refer to the original recording, and frame numbers are those written by the camera.
 
@@ -25,6 +25,10 @@ When a DJI SRT is loaded, P1-only visual controls are hidden. The **Elapsed** it
 
 ## Transparent overlay exports
 
-**Export telemetry alpha only…** appears beside Export video and works with DJI and P1 sources. Its dialog lets you select Telemetry, OSD and Visuals. Choose **One combined file** for a single ProRes 4444 overlay, or **Separate files** to create one transparent movie for each selected layer. Separate files make it easy to enable, disable and arrange layers independently in a video editor.
+**Export telemetry alpha only…** appears beside Export video and works with DJI and P1 sources. Its three-column dialog lets you select individual telemetry sources, OSD and grouped Visuals. Choose **Export Combined** for a single ProRes 4444 overlay, or **Export Individual Files** to create one transparent movie for each selected layer. Separate files make it easy to enable, disable and arrange layers independently in a video editor.
 
 Alpha-only exports are fast because they render the overlays without rendering the source video. Use **Export video** when you want the selected overlays baked into a new MP4.
+
+## Independent sources and styling
+
+Use **Add telemetry** for separate simultaneous SRTs (not consecutive chapters). Use Sources to select a layer and adjust its timing offset. Click a field or drag a selection rectangle from empty space, Ctrl/Cmd-click to toggle fields in one layer, then choose a colour. Save a preset to retain the design; import additional sources in the same order on another video. See the [user guide](USER_GUIDE.md#written-telemetry).

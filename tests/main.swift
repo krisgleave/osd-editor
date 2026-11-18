@@ -100,6 +100,17 @@ if CommandLine.arguments.contains("--camera-test") {
  precondition(samples[0].values["GBat"]=="3.42")
  precondition(samples[0].values["Signal"]=="4")
  print("PASS: Low voltage, decimal commas and missing telemetry fields")
+ } else if CommandLine.arguments.contains("--telemetry-preset-test") {
+  var primary=Layout();primary.line.x=0.25;primary.fieldColours=["SBat":[1,0,0]]
+  var extra=Layout();extra.line.y=0.42;extra.line.size=36;extra.fieldColours=["Signal":[0,1,0]];extra.widgets[0].enabled=false
+  primary.additionalStyles=[extra]
+  let data=try! JSONEncoder().encode(primary);let decoded=try! JSONDecoder().decode(Layout.self,from:data)
+  precondition(decoded.line.x==0.25 && decoded.fieldColours?["SBat"] == [1,0,0])
+  precondition(decoded.additionalStyles?.count==1 && decoded.additionalStyles?[0].line.y==0.42 && decoded.additionalStyles?[0].line.size==36)
+  precondition(decoded.additionalStyles?[0].fieldColours?["Signal"] == [0,1,0] && decoded.additionalStyles?[0].widgets[0].enabled==false)
+  let legacy=try! JSONDecoder().decode(Layout.self,from:JSONEncoder().encode(Layout()))
+  precondition(legacy.additionalStyles==nil)
+  print("PASS: Primary and additional telemetry preset round-trip")
  } else if CommandLine.arguments.contains("--independent-telemetry-test") {
   let a=AdditionalTelemetry(url:URL(fileURLWithPath:"/first.srt"),cues:[Cue(start:0,end:1,values:["SBat":"3.4"])])
   var b=AdditionalTelemetry(url:URL(fileURLWithPath:"/second.srt"),cues:[Cue(start:0,end:1,values:["SBat":"4.1"])])

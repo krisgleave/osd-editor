@@ -1,6 +1,6 @@
 # Compatibility and validation
 
-## v1.2 release
+## v1.3.0 release
 
 - **Executable:** ARM64 / Apple Silicon only.
 - **Minimum macOS:** 27.0. Intel and earlier macOS versions are not qualified.
@@ -45,3 +45,7 @@ These are development checks, not a guarantee for all files. The included automa
 ## Requesting a compatibility test
 
 Open a compatibility report with the system, goggles/VRX, firmware, flight-controller firmware, recording mode, computer/OS, file types and expected display. Describe whether original footage already contains burned-in OSD. Avoid posting GPS coordinates, private footage, serial numbers or restricted font files in public issues. Discuss a suitable sample first.
+
+## v1.3.0 regression coverage
+
+New tests cover voltage values from 2.90 to 4.20 V, decimal commas, missing fields, independent source timing/visibility and telemetry preset round-trips. Independent source export and field styling were manually checked during development by the maintainer. Final macOS release build/test results must be verified before publication. Multiple graphical OSD sources are not added by this release.

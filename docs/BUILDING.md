@@ -18,6 +18,9 @@ The app entry point is `src/main.swift`; the interface and application logic are
 ```sh
 python3 scripts/build.py --tests
 build/OSDEditorTests --self-test
+build/OSDEditorTests --telemetry-regression-test
+build/OSDEditorTests --independent-telemetry-test
+build/OSDEditorTests --telemetry-preset-test
 build/OSDEditorTests --interaction-test
 build/OSDEditorTests --preset-identity-test
 build/OSDEditorTests --visuals-test

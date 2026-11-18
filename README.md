@@ -1,6 +1,6 @@
 <p align="center"><img src="assets/AppIcon.png" width="150" alt="OSD Editor icon"></p>
 
-**Version 1.2 adds DJI camera-SRT support, automatic DJI chapter combining and selectable transparent overlay exports.** See [Editing DJI camera telemetry](docs/DJI.md).
+**Version 1.3.0 adds independent telemetry layers, individual field colours, enhanced presets and flexible transparent exports.** See [release notes](RELEASE_NOTES.md) and the [user guide](docs/USER_GUIDE.md).
 
 
 # OSD Editor
@@ -9,7 +9,7 @@
 
 Created by **Kris Gleave (KrisTalksTech)** for the FPV community.
 
-[Download v1.2](https://github.com/krisgleave/osd-editor/releases/latest) · [User guide](docs/USER_GUIDE.md) · [Font setup](docs/FONTS.md) · [Support](SUPPORT.md) · [Report an issue](https://github.com/krisgleave/osd-editor/issues)
+[Download v1.3.0](https://github.com/krisgleave/osd-editor/releases/latest) · [User guide](docs/USER_GUIDE.md) · [Font setup](docs/FONTS.md) · [Support](SUPPORT.md) · [Report an issue](https://github.com/krisgleave/osd-editor/issues)
 
 OSD Editor reconstructs supported recorded OSD so you can move, resize, colour and hide groups before exporting a new video. It can also add a written telemetry line, optional visual indicators and a custom OSD-font label such as a drone name.
 
@@ -40,7 +40,7 @@ Screenshots show an example local setup with a user-imported Nexus font and a cu
 
 ## Requirements
 
-| | v1.2 download |
+| | v1.3.0 download |
 |---|---|
 | Computer | Apple Silicon Mac (M-series) |
 | macOS | 27.0 or later |
@@ -52,10 +52,10 @@ Development testing used an **M4 Pro MacBook Pro** with P1 sample recordings. Th
 
 ## Get started
 
-1. Download **OSD-Editor-1.2.0-Mac.zip** from [Releases](https://github.com/krisgleave/osd-editor/releases/latest). GitHub’s **Code → Download ZIP** contains source, not the app.
+1. Download **OSD-Editor-1.3.0-Mac.zip** from [Releases](https://github.com/krisgleave/osd-editor/releases/latest). GitHub’s **Code → Download ZIP** contains source, not the app.
 2. Unzip and move **OSD Editor.app** into Applications if desired.
 3. Import a compatible OSD PNG when prompted. **Get OSD fonts…** opens Sneaky FPV’s site without closing the import dialogue. [Font instructions](docs/FONTS.md).
-4. Open a recording. A same-name SRT in the same folder loads automatically. Use **Import SRT Files** to select one sidecar manually, or select several original DJI chapters to combine them into one matching SRT beside the opened video. For a Gyroflow workflow, export the complete joined clip before importing it. A trimmed or retimed Gyroflow export will not match the original SRT timestamps.
+4. Open a recording. A same-name SRT in the same folder loads automatically. Use **Import SRT Files** for a primary sidecar, **Add telemetry** for independent extra layers, or **Sources → Replace primary / join DJI chapters** to combine original DJI chapters. For a Gyroflow workflow, export the complete joined clip before importing it. A trimmed or retimed Gyroflow export will not match the original SRT timestamps.
 5. Select and arrange overlays, then either export a new MP4 with them baked in or create transparent alpha-only MOV overlays. Alpha exports can combine Telemetry, recorded OSD and Visuals into one file or keep them separate for flexible editing.
 
 The app is locally/ad-hoc signed, **not Apple Developer ID signed or notarized**. See [installation and troubleshooting](docs/INSTALLATION.md) if macOS blocks it. Do not disable macOS security protections globally.
@@ -64,7 +64,10 @@ The app is locally/ad-hoc signed, **not Apple Developer ID signed or notarized**
 
 - Direct OSD group dragging and rectangle selection of whole groups.
 - Individual or multi-item sizing, tint, hide/show and frame/selection alignment.
-- Written telemetry line with selectable fields, font, colour, size and positioning.
+- Multiple independent written telemetry lines with selectable fields, font, colour, size and positioning.
+- Individual field colours, rectangle selection, Ctrl/Cmd-click and per-group OSD outlines.
+- Improved voltage parsing for low readings, decimal commas, whitespace and missing fields.
+- New session (Cmd+N), I/O trim keys and Finder reveal after successful single-video/alpha exports.
 - Optional SBat/GBat battery cards, signal bars, bitrate/history graph and distance indicator.
 - Custom text using the imported OSD PNG font, with saved styling and position.
 - **None / OSD / TELEM / VIS** selection targets; visual group dragging preserves spacing.
@@ -74,8 +77,8 @@ The app is locally/ad-hoc signed, **not Apple Developer ID signed or notarized**
 - H.264 or HEVC exports retaining source frame timing; no frame-rate conversion setting.
 - Sequential batch export, progress, cancellation and batch reports.
 - DJI camera SRT fields including ISO, shutter, EV, colour temperature, colour profile, aperture and elapsed recording time.
-- Transparent ProRes 4444 overlay export. Choose Telemetry, recorded OSD and Visuals, then create one combined alpha movie or separate alpha movies for each selected layer.
-- Presets with save/rename/delete/import/export, aspect filtering and launch defaults.
+- Transparent ProRes 4444 overlay export. Choose individual telemetry sources, recorded OSD and grouped Visuals in three columns, then export combined or individual MOVs.
+- Presets with save/rename/delete/import/export, aspect filtering, launch defaults and reusable additional telemetry styles.
 - Managed font library; imported files are copied rather than referenced in Downloads.
 - Light, dark and system appearance; native Mac window controls.
 

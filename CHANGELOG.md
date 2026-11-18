@@ -1,5 +1,15 @@
 # Changelog
 
+## 1.3.0
+
+- Independent additional SRT sources, source management, offsets and per-layer styling.
+- Individual telemetry field colours, marquee and modified-click selection; independent OSD selection outlines.
+- Preset persistence for primary and additional telemetry designs.
+- Three-column alpha export picker; combined or individual layer MOVs; Finder reveal after success.
+- New session and I/O trim shortcuts.
+- Voltage parsing fixes (decimal comma/point, low readings, whitespace, units and adjacent empty fields); improved zero-duration non-DJI cue handling.
+- Updated documentation and release packaging.
+
 ## 1.2 — 2026-11-16
 
 - Added DJI camera-metadata SRT import, with ISO, shutter, EV, CT, colour profile, aperture and further recorded camera fields available in the telemetry line.
