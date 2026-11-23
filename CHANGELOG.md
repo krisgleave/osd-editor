@@ -1,3 +1,9 @@
+## v1.4
+
+- Added macOS PKG installer and automatic installer packaging.
+- Updated application version and installation documentation.
+- Retained portable ZIP distribution and existing editing features.
+
 # Changelog
 
 ## 1.3.0

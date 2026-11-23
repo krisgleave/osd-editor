@@ -2,7 +2,7 @@
 
 ## Install
 
-Download **OSD-Editor-1.3.0-Mac.zip** from [Releases](https://github.com/krisgleave/osd-editor/releases). Unzip and open OSD Editor.app; Applications is an optional convenient destination.
+Download **OSD-Editor-1.4-arm64.pkg** for installation, or **OSD-Editor-1.4-Mac.zip** for manual installation from [Releases](https://github.com/krisgleave/osd-editor/releases). Unzip and open OSD Editor.app; Applications is an optional convenient destination.
 
 Requirements: Apple Silicon Mac and macOS 27.0 or later. The app needs no Homebrew, FFmpeg, Xcode or terminal commands to run. OSD rendering needs a separately imported compatible PNG font.
 
@@ -38,4 +38,4 @@ A fresh user starts with built-in Default and no imported OSD fonts or personal 
 
 See [compatibility](COMPATIBILITY.md) before reporting another recording system as supported.
 
-For v1.3.0, existing presets remain readable. Re-save any older design with additional telemetry layers configured; restore the source files separately and in the same order. See the [release notes](../RELEASE_NOTES.md).
+For v1.4, existing presets remain readable. Re-save any older design with additional telemetry layers configured; restore the source files separately and in the same order. See the [release notes](../RELEASE_NOTES.md).

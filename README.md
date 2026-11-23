@@ -1,6 +1,6 @@
 <p align="center"><img src="assets/AppIcon.png" width="150" alt="OSD Editor icon"></p>
 
-**Version 1.3.0 adds independent telemetry layers, individual field colours, enhanced presets and flexible transparent exports.** See [release notes](RELEASE_NOTES.md) and the [user guide](docs/USER_GUIDE.md).
+**Version 1.4 adds independent telemetry layers, individual field colours, enhanced presets and flexible transparent exports.** See [release notes](RELEASE_NOTES.md) and the [user guide](docs/USER_GUIDE.md).
 
 
 # OSD Editor
@@ -9,7 +9,7 @@
 
 Created by **Kris Gleave (KrisTalksTech)** for the FPV community.
 
-[Download v1.3.0](https://github.com/krisgleave/osd-editor/releases/latest) · [User guide](docs/USER_GUIDE.md) · [Font setup](docs/FONTS.md) · [Support](SUPPORT.md) · [Report an issue](https://github.com/krisgleave/osd-editor/issues)
+[Download v1.4](https://github.com/krisgleave/osd-editor/releases/latest) · [User guide](docs/USER_GUIDE.md) · [Font setup](docs/FONTS.md) · [Support](SUPPORT.md) · [Report an issue](https://github.com/krisgleave/osd-editor/issues)
 
 OSD Editor reconstructs supported recorded OSD so you can move, resize, colour and hide groups before exporting a new video. It can also add a written telemetry line, optional visual indicators and a custom OSD-font label such as a drone name.
 
@@ -40,7 +40,7 @@ Screenshots show an example local setup with a user-imported Nexus font and a cu
 
 ## Requirements
 
-| | v1.3.0 download |
+| | v1.4 download |
 |---|---|
 | Computer | Apple Silicon Mac (M-series) |
 | macOS | 27.0 or later |
@@ -52,8 +52,8 @@ Development testing used an **M4 Pro MacBook Pro** with P1 sample recordings. Th
 
 ## Get started
 
-1. Download **OSD-Editor-1.3.0-Mac.zip** from [Releases](https://github.com/krisgleave/osd-editor/releases/latest). GitHub’s **Code → Download ZIP** contains source, not the app.
-2. Unzip and move **OSD Editor.app** into Applications if desired.
+1. Download **OSD-Editor-1.4-arm64.pkg** for guided installation, or **OSD-Editor-1.4-Mac.zip** from [Releases](https://github.com/krisgleave/osd-editor/releases/latest). GitHub’s **Code → Download ZIP** contains source, not the app.
+2. Run the PKG installer, or unzip the ZIP and move **OSD Editor.app** into Applications.
 3. Import a compatible OSD PNG when prompted. **Get OSD fonts…** opens Sneaky FPV’s site without closing the import dialogue. [Font instructions](docs/FONTS.md).
 4. Open a recording. A same-name SRT in the same folder loads automatically. Use **Import SRT Files** for a primary sidecar, **Add telemetry** for independent extra layers, or **Sources → Replace primary / join DJI chapters** to combine original DJI chapters. For a Gyroflow workflow, export the complete joined clip before importing it. A trimmed or retimed Gyroflow export will not match the original SRT timestamps.
 5. Select and arrange overlays, then either export a new MP4 with them baked in or create transparent alpha-only MOV overlays. Alpha exports can combine Telemetry, recorded OSD and Visuals into one file or keep them separate for flexible editing.

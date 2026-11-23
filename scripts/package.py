@@ -2,7 +2,7 @@
 """Package an ad-hoc signed Apple Silicon release; does not notarize or publish."""
 from pathlib import Path
 import hashlib,plistlib,shutil,struct,subprocess,tempfile,zipfile
-ROOT=Path(__file__).resolve().parents[1];VERSION='1.3.0';BUILD='130';dist=ROOT/'dist';dist.mkdir(exist_ok=True)
+ROOT=Path(__file__).resolve().parents[1];VERSION='1.4';BUILD='140';dist=ROOT/'dist';dist.mkdir(exist_ok=True)
 binary=ROOT/'build/OSDEditor'
 if not binary.exists():raise SystemExit('Run python3 scripts/build.py first.')
 with tempfile.TemporaryDirectory(prefix='osd-editor-package-') as tmp:
@@ -31,6 +31,22 @@ with tempfile.TemporaryDirectory(prefix='osd-editor-package-') as tmp:
    if f.is_file():z.write(f,f.relative_to(tmp))
   for name in ['README.md','LICENSE','THIRD_PARTY_NOTICES.md','CHANGELOG.md','RELEASE_NOTES.md','SUPPORT.md']:z.write(ROOT/name,name)
   for f in (ROOT/'docs').glob('*.md'):z.write(f,'docs/'+f.name)
+
+ pkg_path=dist/f'OSD-Editor-{VERSION}-arm64.pkg'
+ with tempfile.TemporaryDirectory(prefix='osd-editor-installer-') as stage_tmp:
+  stage=Path(stage_tmp)
+  applications=stage/'Applications'
+  applications.mkdir()
+  shutil.copytree(app, applications/'OSD Editor.app')
+  subprocess.run([
+   'pkgbuild',
+   '--root',str(stage),
+   '--install-location','/',
+   '--identifier','com.kristalkstech.osdeditor.installer',
+   '--version',VERSION,
+   str(pkg_path)
+  ],check=True)
+
 source=dist/f'OSD-Editor-{VERSION}-source.zip'
 with zipfile.ZipFile(source,'w',zipfile.ZIP_DEFLATED) as z:
  for f in sorted(ROOT.rglob('*')):
@@ -38,6 +54,6 @@ with zipfile.ZipFile(source,'w',zipfile.ZIP_DEFLATED) as z:
   relative=f.relative_to(ROOT)
   if any(part in {'.git','build','dist','.DS_Store','__pycache__'} for part in relative.parts):continue
   z.write(f,Path(f'osd-editor-{VERSION}')/relative)
-assets=[zip_path,source]
+assets=[zip_path,source,pkg_path]
 (dist/'SHA256SUMS.txt').write_text(''.join(hashlib.sha256(f.read_bytes()).hexdigest()+'  '+f.name+'\n' for f in assets))
 print('\n'.join(str(f) for f in assets+[dist/'SHA256SUMS.txt']))
