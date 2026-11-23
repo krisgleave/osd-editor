@@ -1,2 +1,4 @@
-custom: ["https://www.paypal.me/krisgleave", "https://www.youtube.com/@KrisTalksTech"]
-custom: ['https://buymeacoffee.com/krisgleave']
+custom:
+  - "https://www.paypal.me/krisgleave"
+  - "https://www.youtube.com/@KrisTalksTech"
+  - "https://buymeacoffee.com/krisgleave"
