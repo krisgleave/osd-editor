@@ -5,6 +5,19 @@
 
 # OSD Editor
 
+<!-- KRIS-SUPPORT-START -->
+
+> ☕ **Support Free FPV Software Development**
+>
+> All my applications are free and open source. If you find
+> them useful, optional contributions help support continued
+> development and improvements.
+>
+> **[☕ Buy Me a Coffee](https://buymeacoffee.com/krisgleave)**
+
+<!-- KRIS-SUPPORT-END -->
+
+
 **Edit FPV OSD, telemetry and recordings on your Mac.**
 
 Created by **Kris Gleave (KrisTalksTech)** for the FPV community.
