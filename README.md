@@ -7,13 +7,16 @@
 
 <!-- KRIS-SUPPORT-START -->
 
-> ☕ **Support Free FPV Software Development**
+> **❤️ Support Free FPV Software Development**
 >
-> All my applications are free and open source. If you find
-> them useful, optional contributions help support continued
-> development and improvements.
+> My applications are free and open source. If you find them useful,
+> optional contributions help support continued development.
 >
-> **[☕ Buy Me a Coffee](https://buymeacoffee.com/krisgleave)**
+> ❤️ **[Become a GitHub Sponsor](https://github.com/sponsors/krisgleave)** — Monthly or one-time support
+>
+> ☕ **[Buy Me a Coffee](https://buymeacoffee.com/krisgleave)** — Quick one-off contribution
+>
+> All applications remain free for everyone.
 
 <!-- KRIS-SUPPORT-END -->
 
